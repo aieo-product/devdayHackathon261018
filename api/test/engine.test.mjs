@@ -15,8 +15,8 @@ function harness({ decide, settings } = {}) {
   return { engine, owner, session, frame, advance(ms = 1000) { now += ms; }, result(value) { result = value; }, get calls() { return calls; } };
 }
 
-test('five seconds of positive samples notify once; cooldown requires a fresh five-second hold', async () => {
-  const h = harness();
+test('an explicitly enabled cooldown requires a fresh five-second hold afterward', async () => {
+  const h = harness({ settings: { cooldownMs: 60000 } });
   assert.equal(h.session.continuous_hold_ms, 0);
   assert.equal(h.session.required_hold_ms, 5000);
   const a = await h.frame('1');
@@ -54,6 +54,56 @@ test('five seconds of positive samples notify once; cooldown requires a fresh fi
   const next = await h.frame('next-notify');
   assert.equal(next.notify, true);
   assert.notEqual(next.notification_id, notification.notification_id);
+});
+
+test('default sampling continues after an alert and repeated alerts each require a fresh five-second hold', async () => {
+  const h = harness();
+  let previousNotificationId;
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    if (cycle) h.advance();
+    for (let second = 0; second <= 5; second += 1) {
+      if (second) h.advance();
+      const result = await h.frame(`cycle-${cycle}-${second}`);
+      assert.equal(result.continuous_hold_ms, second * 1000);
+      assert.equal(result.notify, second === 5);
+      assert.equal(result.cooldown_remaining_ms, 0);
+      assert.equal(result.next_capture_after_ms, 1000);
+      if (second === 5) {
+        assert.equal(result.state, 'observing');
+        assert.ok(result.notification_id);
+        assert.notEqual(result.notification_id, previousNotificationId);
+        previousNotificationId = result.notification_id;
+        const duplicate = await h.frame(`cycle-${cycle}-${second}`);
+        assert.equal(duplicate.reason, 'duplicate_frame');
+        assert.equal(duplicate.notify, false);
+        const snapshot = h.engine.get({ owner: h.owner, sessionId: h.session.session_id });
+        assert.equal(snapshot.notify, false);
+        assert.equal(snapshot.continuous_hold_ms, 0, 'new hold starts after the notification');
+      }
+    }
+  }
+  assert.equal(h.calls, 18, 'duplicates never invoke the provider');
+});
+
+test('disabled cooldown clears persisted active and paused cooldowns without replaying a notification', async () => {
+  for (const state of ['cooldown', 'paused']) {
+    const h = harness();
+    const persisted = h.engine.sessions.get(h.session.session_id);
+    Object.assign(persisted, { state, cooldownUntil: 60000, holdStartedAt: 0, continuousHoldMs: 5000, lastSampleAt: 0 });
+    const snapshot = h.engine.get({ owner: h.owner, sessionId: h.session.session_id });
+    assert.equal(snapshot.state, state === 'paused' ? 'paused' : 'observing');
+    assert.equal(snapshot.cooldown_remaining_ms, 0);
+    assert.equal(snapshot.next_capture_after_ms, 0);
+    assert.equal(snapshot.continuous_hold_ms, 0);
+    assert.equal(snapshot.notify, false);
+    if (state === 'paused') {
+      assert.equal(h.engine.control({ owner: h.owner, sessionId: h.session.session_id, action: 'resume' }).state, 'observing');
+    }
+    const fresh = await h.frame('after-deploy');
+    assert.equal(fresh.state, 'suspected');
+    assert.equal(fresh.continuous_hold_ms, 0);
+    assert.equal(fresh.notify, false);
+  }
 });
 
 test('4999ms does not notify; a fresh positive at exactly 5000ms notifies without another interval', async () => {

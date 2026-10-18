@@ -79,11 +79,14 @@ test('Workers runtime: authenticated API, SQLite persistence, alerts and lifecyc
       samples.push(sample.value);
     }
     assert.equal(samples.filter(sample => sample.notify).length, 1);
-    assert.equal(samples[5].state, 'cooldown');
+    assert.equal(samples[5].state, 'observing');
     assert.ok(samples[5].continuous_hold_ms >= 5000);
     assert.ok(samples[5].notification_id);
+    assert.equal(samples[5].cooldown_remaining_ms, 0);
+    assert.ok(samples[5].next_capture_after_ms <= 1000);
     assert.equal((await frame(path, 'positive-5')).value.reason, 'duplicate_frame');
-    assert.equal((await frame(path, 'cooldown')).value.notify, false);
+    assert.equal((await call(path)).value.notify, false);
+    assert.equal((await call(path)).value.continuous_hold_ms, 0);
     assert.equal((await control(path, 'pause')).value.state, 'paused');
     assert.equal((await frame(path, 'paused')).value.notify, false);
     await mf.dispose();
@@ -101,8 +104,20 @@ test('Workers runtime: authenticated API, SQLite persistence, alerts and lifecyc
     } finally { database.close(); }
     mf = new Miniflare(runtimeOptions(options));
     assert.equal((await call(path)).value.state, 'paused');
-    assert.equal((await control(path, 'resume')).value.state, 'cooldown');
+    assert.equal((await control(path, 'resume')).value.state, 'observing');
     assert.equal((await frame(path, 'positive-5')).value.reason, 'duplicate_frame');
+    const nextSamples = [];
+    for (let i = 0; i < 6; i++) {
+      await sleep(1010);
+      nextSamples.push((await frame(path, `next-positive-${i}`)).value);
+    }
+    assert.equal(nextSamples.filter(sample => sample.notify).length, 1, 'same persisted session can notify again after restart');
+    assert.equal(nextSamples[0].continuous_hold_ms, 0);
+    assert.equal(nextSamples[5].state, 'observing');
+    assert.equal(nextSamples[5].cooldown_remaining_ms, 0);
+    assert.ok(nextSamples[5].continuous_hold_ms >= 5000);
+    assert.notEqual(nextSamples[5].notification_id, samples[5].notification_id);
+    assert.equal((await frame(path, 'next-positive-5')).value.notify, false);
     assert.equal((await control(path, 'end')).value.state, 'ended');
     assert.equal((await control(path, 'resume')).value.state, 'ended');
     assert.equal((await frame(path, 'ended')).value.notify, false);

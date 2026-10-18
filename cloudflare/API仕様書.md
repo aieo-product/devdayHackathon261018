@@ -81,7 +81,7 @@ X-Frame-Id: cores3-000001
 - 本文は生バイト列です。multipart、JSON、Base64文字列では送信しません。
 - `X-Frame-Id`は1〜128文字、英数字または`_ . : -`で構成し、同一セッション内で一意にします。
 - 同一セッションで同時に1画像だけ処理します。処理中に別のフレームIDを送ると409 `frame_in_progress`です。同じ受理済みフレームIDを再送した場合は、判定中でも200 `duplicate_frame`・`notify: false`を返します。
-- `next_capture_after_ms`まで待ってから次を撮影します。送り過ぎやクールダウン中は判定を省略し、`notify: false`で返します。
+- `next_capture_after_ms`まで待ってから次を撮影します。送り過ぎの場合は判定を省略し、`notify: false`で返します。既定では通知後のクールダウンはありません。
 - 受理済みフレームIDを再送しても通知を再送しません。通信切断で通知応答を受け取れなかった場合の、通知の確実な再配送は実装していません。
 
 ### 一時停止・再開・終了
@@ -96,10 +96,12 @@ X-Frame-Id: cores3-000001
 
 ## スナップショット全フィールド
 
+通知時の例です。`next_capture_after_ms`は推論にかかった時間を差し引くため、実際の応答では0〜1000msになります。
+
 ```json
 {
   "session_id": "a038a096-960c-4a0a-b5e2-0f407fe3d071",
-  "state": "cooldown",
+  "state": "observing",
   "notify": true,
   "notification_id": "a30cd823-84c8-4718-a001-a91c14d20e34",
   "message": "スマホを置いて、作業に戻りませんか？",
@@ -108,8 +110,8 @@ X-Frame-Id: cores3-000001
   "consecutive_count": 0,
   "continuous_hold_ms": 5000,
   "required_hold_ms": 5000,
-  "cooldown_remaining_ms": 60000,
-  "next_capture_after_ms": 60000,
+  "cooldown_remaining_ms": 0,
+  "next_capture_after_ms": 1000,
   "provider": "openai",
   "reason": "phone_use_confirmed"
 }
@@ -125,9 +127,9 @@ X-Frame-Id: cores3-000001
 | `phone_probability` | number / null | 観測画像でスマホを手に持っている確率、0〜1。未判定／判定失敗時はnull |
 | `observable_probability` | number / null | 対象の人・手元を判断できる可視性の確率、0〜1。未判定／判定失敗時はnull |
 | `consecutive_count` | integer | 互換用の連続候補検出回数。通知条件ではない。通知時・非検出・判定不能・停止で0へ戻る |
-| `continuous_hold_ms` | number | 最後の陽性画像で確認できた継続保持時間。最初は0、通知時は5000以上。GETや推論待ちだけでは増えない。cooldown中は達成時間を保持し、終了時・停止・非検出・判定不能で0へ戻る |
+| `continuous_hold_ms` | number | 最後の陽性画像で確認できた継続保持時間。最初は0、通知応答は5000以上。次の新しい陽性画像から新たな5秒の確認を始める。GETや推論待ちだけでは増えない。停止・非検出・判定不能で0へ戻る |
 | `required_hold_ms` | number | 通知に必要な継続保持時間。現在は5000 |
-| `cooldown_remaining_ms` | number | 通知抑制の残りミリ秒。終了済みは0 |
+| `cooldown_remaining_ms` | number | 互換用の通知抑制残り時間。既定では常に0 |
 | `next_capture_after_ms` | number | 次の撮影まで待つ時間。0でもpaused／endedなら撮影しない |
 | `provider` | string | `mock`または`openai`。UI／デモでモックを区別する |
 | `reason` | string | 今回の状態／省略理由。下記一覧を参照 |
@@ -140,7 +142,7 @@ X-Frame-Id: cores3-000001
 | --- | --- | --- |
 | `observing` | 見守り中 | 指定の間隔で撮影 |
 | `suspected` | スマホ保持を確認中 | 指定の間隔で撮影。まだ通知しない |
-| `cooldown` | 通知後の待機 | 指定の待ち時間は撮影を休む |
+| `cooldown` | 通知後の待機（互換用） | 既定では使わない。待機を設定したサーバーでは指定時間だけ撮影を休む |
 | `unknown` | 判定できません | 指定の間隔で再試行。通知しない |
 | `paused` | 一時停止 | 撮影停止 |
 | `ended` | 終了 | 撮影停止。再開は新規セッション |
@@ -159,8 +161,9 @@ X-Frame-Id: cores3-000001
 | `phone_use_suspected` | スマホ保持の候補だが継続時間が5秒未満 |
 | `phone_use_confirmed` | 5秒の継続保持を確認して新しい通知を発行した |
 | `insufficient_visibility` | 人・手元が十分見えず判定できない |
-| `cooldown_active` | 通知後の待機中なので判定しない |
-| `cooldown_finished` | 通知後の待機が終了した |
+| `cooldown_active` | 互換用。待機を設定したサーバーで通知後の待機中なので判定しない |
+| `cooldown_finished` | 互換用。待機を設定したサーバーで通知後の待機が終了した |
+| `cooldown_disabled` | 設定変更により以前の通知後待機を解除した |
 | `capture_too_soon` | 撮影間隔が短すぎるため判定しない |
 | `duplicate_frame` | 受理済みのフレームIDなので判定しない |
 | `decision_timeout` | 判定の時間制限を超えた |
@@ -184,7 +187,7 @@ X-Frame-Id: cores3-000001
 | 可視性のしきい値 | 0.7以上 |
 | 通知までの継続保持 | 5000ms |
 | 連続判定を引き継ぐ最大間隔 | 2500ms |
-| 通知後の待機 | 60秒 |
+| 通知後の待機 | 0秒（クールダウンなし） |
 | 判定タイムアウト／結果の最大経過時間 | 各10秒 |
 | セッション数 | Workerは1セッション1 Durable Object。1000はエンジン内の上限で、Worker全体の上限ではない |
 | セッション当たりの受理済みフレームID | 10000 |
@@ -194,7 +197,7 @@ X-Frame-Id: cores3-000001
 
 最初の陽性画像を受理した時刻を0msとし、以降の新しい陽性画像の受理時刻との差が5000ms以上なら、その判定応答で直ちに`notify: true`を返します。受理時刻は推論待ちの前に記録し、期限・停止は判定後にも確認します。4999msでは通知せず、5000msで陽性を新たに確認した場合に通知します。GET・同じフレームIDの再送・時間経過だけでは通知しません。
 
-非検出・判定不能・providerエラー・pause・end、または受理画像の間隔が2500msを超えた場合は保持開始時刻と進捗を0に戻します。cooldown終了後も新たに5秒間の確認が必要です。`continuous_hold_ms`は確認済みの画像時刻に基づく値で、画面側で経過時間を足しません。
+非検出・判定不能・providerエラー・pause・end、または受理画像の間隔が2500msを超えた場合は保持開始時刻と進捗を0に戻します。通知後のクールダウンはなく、通常の撮影間隔で判定を続けます。通知応答は`state: observing`、`cooldown_remaining_ms: 0`となり、達成した保持時間を含みます。次の新しい陽性画像から新たに5秒間の確認を始めるため、持ち続けた場合も繰り返し通知できます。`continuous_hold_ms`は確認済みの画像時刻に基づく値で、画面側で経過時間を足しません。
 
 `next_capture_after_ms`は直前の受理時刻から1秒後と5秒到達予定時刻の早い方を基準にし、推論中に経過した時間を差し引きます。クライアントは応答からさらに固定1秒待つ処理を追加しません。
 

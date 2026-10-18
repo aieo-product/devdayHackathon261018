@@ -60,7 +60,7 @@ test('thin client works against real HTTP app: notification, duplicate, pause, r
   assert.equal((await client.pause()).state, 'paused');
   assert.equal(client.active, false);
   assert.equal(await client.frame(image), null);
-  assert.equal((await client.resume()).state, 'cooldown');
+  assert.equal((await client.resume()).state, 'observing');
   assert.equal(client.active, true);
   assert.equal((await client.end()).state, 'ended');
   assert.equal(client.active, false);

@@ -2,10 +2,10 @@ import { FocusClient } from '/focus-client.mjs';
 const $ = (id) => document.getElementById(id);
 const video = $('camera-video');
 const canvas = document.createElement('canvas');
-let client, stream, mode = 'idle', generation = 0, timer, nextAt = 0;
+let client, stream, mode = 'idle', generation = 0, timer, notificationTimer, nextAt = 0;
 let configured = false, started = false, frames = 0, notices = 0, audio;
 const seen = new Set();
-const labels = { idle: '待機中', starting: '準備中', running: '確認中', observing: '観察中', holding: '保持を検知', cooldown: '通知後の待機', pausing: '停止中', paused: '一時停止', resuming: '再開中', ending: '終了中', ended: '終了', error: 'エラー' };
+const labels = { idle: '待機中', starting: '準備中', running: '確認中', observing: '観察中', suspected: '保持を検知', holding: '保持を検知', cooldown: '通知後の待機', pausing: '停止中', paused: '一時停止', resuming: '再開中', ending: '終了中', ended: '終了', error: 'エラー' };
 function log(message) {
   const item = document.createElement('li');
   item.textContent = `${new Date().toLocaleTimeString('ja-JP')}  ${message}`;
@@ -25,7 +25,7 @@ function controls() {
   $('state-label').dataset.state = mode;
 }
 function stopCamera() {
-  clearTimeout(timer); nextAt = 0;
+  clearTimeout(timer); clearTimeout(notificationTimer); nextAt = 0;
   const old = stream; stream = null;
   old?.getTracks().forEach((track) => track.stop());
   video.srcObject = null;
@@ -49,7 +49,7 @@ function render(result) {
   if (mode === 'running') {
     $('state-label').textContent = labels[result.state] || result.state;
     $('state-label').dataset.state = result.state;
-    $('status-message').textContent = result.state === 'cooldown' ? '通知しました。次の判定まで待機しています。' : result.reason === 'insufficient_visibility' ? '手元が見えるようにカメラの位置を調整してください。' : '手元を映して、スマホを持つ・置く動作を試してください。';
+    $('status-message').textContent = result.state === 'cooldown' ? '通知しました。次の判定まで待機しています。' : result.notify ? '通知しました。続けて判定します。次の通知には新たに5秒の保持が必要です。' : result.reason === 'insufficient_visibility' ? '手元が見えるようにカメラの位置を調整してください。' : '手元を映して、スマホを持つ・置く動作を試してください。';
   }
 }
 function prepareSound() {
@@ -119,6 +119,8 @@ async function capture(epoch) {
       seen.add(result.notification_id); $('notification-count').textContent = ++notices;
       $('notification-detail').textContent = result.message || 'スマホの連続保持を検知しました';
       $('notification').hidden = false; beep(); log('通知: スマホの連続保持を検知');
+      clearTimeout(notificationTimer);
+      notificationTimer = setTimeout(() => { $('notification').hidden = true; }, 2500);
     }
     if (result.state === 'ended') { await end('確認時間が終了しました。'); return; }
     if (result.state === 'paused') { await pause(); return; }
