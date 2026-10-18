@@ -9,6 +9,7 @@
     "start:api": "node --env-file-if-exists=api/.env api/src/index.mjs",
     "test": "node --test api/test/*.test.mjs clients/*.test.mjs",
     "smoke": "node --env-file-if-exists=api/.env scripts/smoke-test.mjs",
+    "smoke:worker": "node --env-file-if-exists=cloudflare/.env.connection scripts/smoke-worker.mjs",
     "start:worker": "wrangler dev -c cloudflare/wrangler.jsonc",
     "deploy:worker": "wrangler deploy -c cloudflare/wrangler.jsonc",
     "check:worker": "wrangler deploy --dry-run -c cloudflare/wrangler.jsonc",

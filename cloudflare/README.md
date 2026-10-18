@@ -36,6 +36,28 @@ npm run deploy:worker
 
 公開URL：`https://focus-shared-api-20261018.take-otani.workers.dev`。以下の`BASE_URL`をそのHTTPS URLへ置換します。ローカルは`http://127.0.0.1:8787`です。Webチームは実際のOriginを`ALLOWED_ORIGINS`へ完全一致で登録してください（パス・末尾スラッシュ・ワイルドカードなし）。既定は`http://localhost:3000,http://localhost:5173`。端末のHTTP通信にはCORS設定は不要です。
 
+## 実APIの疎通確認とエラー診断
+
+`cloudflare/.env.connection` に `FOCUS_API_URL` と端末接続用の `FOCUS_API_TOKEN` を設定して、リポジトリ直下で次を実行します。このファイルはGit管理対象外です。OpenAIキーはWorkerのSecretに設定します。
+
+```sh
+npm run smoke:worker
+# 任意：自分で用意したJPEG/PNGを使う
+FOCUS_SMOKE_IMAGE_PATH=/path/to/frame.jpg npm run smoke:worker
+```
+
+既定では有効な無地PNGを生成し、実Decisions APIへ1枚だけ送ります。キーが有効であることとレスポンスの解析を確かめる試験で、スマホ認識精度の試験ではありません。生成画像では `insufficient_visibility` が正常な判定になり得ます。`provider: openai` と両確率が0〜1の数値であることを確認し、HTTP 200でも `provider_error` や確率nullなら失敗終了します。セッション取得・重複送信・一時停止・再開も確認し、試験セッションは終了します。実API利用分の料金が発生する場合があります。
+
+`provider_error` は上流の非2xx応答です。Workerのサーバーログには次のような安全な診断を記録します。
+
+```json
+{"event":"openai_decision_error","status":401,"code":"invalid_api_key","type":"invalid_request_error"}
+```
+
+記録するのはHTTPステータスと許可したエラー分類だけです。キー・画像・上流のメッセージ・ヘッダーは記録しません。未知の分類は `unknown` になります。利用者向けレスポンスは引き続き `reason: provider_error` です。
+
+`401 / invalid_api_key` の場合、Cloudflareの **Workers & Pages → focus-shared-api-20261018 → Settings → Variables and Secrets** で `OPENAI_API_KEY` を有効なOpenAI APIキーの値に更新し、Deployしてから再試験します。`FOCUS_API_TOKEN` やCloudflare APIトークンはここには使いません。`configured:true` は値の存在確認にすぎず、OpenAIが認証したことを意味しません。
+
 ## 操作
 
 | メソッド | パス | 入力 / 応答 |
