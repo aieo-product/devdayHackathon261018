@@ -1,0 +1,10 @@
+.team-access{width:100%;border-top:1px solid #ffffff20;padding-top:15px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.team-access[hidden],.team-access [hidden]{display:none}
+.team-access-form{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap}
+.team-access-form label{display:grid;gap:6px;font-size:11px;font-weight:700;color:#d8dced}
+.team-access-form input{width:min(260px,100%);box-sizing:border-box;background:#101320;border:1px solid #6a7296;color:#fff;border-radius:8px;padding:11px 12px;font:inherit;font-size:14px}
+.team-access-form input:focus-visible{outline:2px solid #cdff45;outline-offset:3px}
+.team-access button{border:1px solid #88936d;background:#cdff45;color:#142008;padding:11px 14px;border-radius:8px;font-size:12px;font-weight:750}
+.team-access #team-access-logout{background:#201b32;color:#dce3f3;border-color:#8870b4}
+.team-access .team-access-message{flex:1 1 220px;color:#c6d1e5;font-size:12px;line-height:1.7;margin:0}
+@media(max-width:600px){.team-access-form{width:100%}.team-access-form label{flex:1;min-width:150px}.team-access-form input{width:100%}.team-access .team-access-message{flex-basis:100%}}

@@ -114,3 +114,25 @@ test('an empty tour completes immediately without a timer or cue', () => {
   assert.equal(f.timers.length, 0);
   assert.equal(f.seen.length, 0);
 });
+
+test('default browser timers preserve the global receiver and complete the demo sequence', t => {
+  const timers = []; let completed = 0;
+  t.mock.method(globalThis, 'setTimeout', function (callback, delay) {
+    assert.equal(this, globalThis);
+    timers.push({ callback, delay, cancelled: false });
+    return timers.length - 1;
+  });
+  t.mock.method(globalThis, 'clearTimeout', function (id) {
+    assert.equal(this, globalThis);
+    timers[id].cancelled = true;
+  });
+  const showcase = new ActionShowcase({ onFinish: () => { completed++; } });
+  showcase.play(steps);
+  timers[0].callback();
+  timers[1].callback();
+  assert.equal(completed, 1);
+  assert.equal(showcase.active, false);
+  showcase.play(steps);
+  showcase.stop();
+  assert.equal(timers[2].cancelled, true);
+});

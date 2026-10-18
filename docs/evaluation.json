@@ -13,13 +13,14 @@
     "public_api_url": "https://focus-shared-api-20261018.take-otani.workers.dev/",
     "public_api_docs_url": "https://focus-shared-api-20261018.take-otani.workers.dev/docs",
     "openapi_url": "https://focus-shared-api-20261018.take-otani.workers.dev/openapi.json",
-    "public_interactive_ui_url": null,
+    "public_interactive_ui_url": "https://focus-web-20261018.take-otani.workers.dev/",
     "demo_video_url": null,
     "submission_status": "receipt_unverified",
     "public_mcp_url": "https://focus-events-20261018.take-otani.workers.dev/mcp",
     "team_name": null,
     "default_branch": "main",
-    "source_url": "https://github.com/aieo-product/devdayHackathon261018/tree/main"
+    "source_url": "https://github.com/aieo-product/devdayHackathon261018/tree/main",
+    "public_showcase_url": "https://focus-web-20261018.take-otani.workers.dev/?demo=1&pattern=fever&character=green"
   },
   "versions": {
     "current_api": {
@@ -74,6 +75,16 @@
       ],
       "worker_events_retested_commit": "e13216439af2db6c09de1be784307fc00b064981",
       "frontend_tested_commit": "9d0ba6563f1ea7a6b3ac16324f729028807989ea"
+    },
+    "public_frontend": {
+      "status": "deployed",
+      "authentication": "team_code_http_only_cookie_12h",
+      "service_binding": "existing_shared_api",
+      "camera_detection_browser_qa": "verified_with_fake_camera",
+      "evidence": [
+        "cloudflare-web/README.md"
+      ],
+      "anonymous_demo_qa": "in_progress"
     }
   },
   "ai_integration": {
@@ -183,6 +194,18 @@
         "focus-dopa-preview/docs/HANDOFF.md",
         "https://github.com/aieo-product/devdayHackathon261018/pull/12"
       ]
+    },
+    {
+      "id": "public_cloudflare_frontend",
+      "status": "deployed_live_fake_camera_verified_anonymous_demo_qa_pending",
+      "public_url": "https://focus-web-20261018.take-otani.workers.dev/",
+      "showcase_no_api_no_camera": true,
+      "native_mac_helper_supported": false,
+      "evidence": [
+        "cloudflare-web/README.md"
+      ],
+      "demo_url": "https://focus-web-20261018.take-otani.workers.dev/?demo=1&pattern=fever&character=green",
+      "normal_has_demo_panels": false
     }
   ],
   "verification": [
@@ -233,10 +256,11 @@
       "passed": 79,
       "failed": 0,
       "mode": "unit_and_mock",
-      "execution": "rerun_during_main_integration"
+      "execution": "rerun_during_main_integration",
+      "scope": "historical_main_frontend_79_before_public_auth"
     },
     {
-      "id": "current_automated_total",
+      "id": "historical_main_automated_total",
       "passed": 236,
       "failed": 0,
       "includes": [
@@ -247,7 +271,8 @@
         "current_frontend_tests"
       ],
       "includes_reachy_python_tests": false,
-      "execution": "rerun_during_main_integration"
+      "execution": "rerun_during_main_integration",
+      "scope": "historical_main_integration_before_public_frontend_auth"
     },
     {
       "id": "live_events_smoke",
@@ -341,6 +366,55 @@
       "hold_reset_reason": "observation_gap_exceeded_2500ms",
       "capture_and_session_stopped": true,
       "evidence": "devices/cores3/README.md"
+    },
+    {
+      "id": "public_frontend_tests",
+      "command": "npm run test:front",
+      "passed": 99,
+      "failed": 0,
+      "parts": {
+        "previous_frontend": 79,
+        "public_auth": 15,
+        "view_mode": 4,
+        "showcase_receiver_regression": 1
+      },
+      "execution": "public_frontend_deployment_task"
+    },
+    {
+      "id": "public_frontend_worker_tests",
+      "command": "npm run test:web",
+      "passed": 17,
+      "failed": 0,
+      "execution": "public_frontend_deployment_task"
+    },
+    {
+      "id": "current_suite_inventory",
+      "passed": 273,
+      "current_task_reexecuted_all": false,
+      "parts": {
+        "unchanged_prior_api_worker_mac_events": 157,
+        "current_frontend": 99,
+        "public_web_worker": 17
+      }
+    },
+    {
+      "id": "public_frontend_smoke",
+      "page_http_status": 200,
+      "env_path_status": 404,
+      "server_source_path_status": 404,
+      "login_verified": true,
+      "health_provider": "openai",
+      "health_configured": true,
+      "create_session_status": 201,
+      "camera_browser_qa": "verified_with_fake_camera",
+      "image_frames": 7,
+      "real_openai_notifications": 2,
+      "minimum_confirmed_hold_ms": 2000,
+      "pause_end_verified": true,
+      "logout_revocation_verified": true,
+      "mobile_verified": true,
+      "physical_camera_used": false,
+      "anonymous_demo_full_e2e_verified": false
     }
   ],
   "judging_criteria": [
@@ -401,10 +475,17 @@
     "events_adapter_authentication": "shared_admin_token_trusted_server_only",
     "events_contain_images": false,
     "events_worker_storage": "separate_SQLite_Durable_Object",
-    "local_event_queue_durable": false
+    "local_event_queue_durable": false,
+    "public_frontend_authentication": {
+      "mechanism": "team_code_to_12h_HttpOnly_Secure_SameSite_Strict_cookie",
+      "session_ownership": "browser_auth_principal_Durable_Object",
+      "max_sessions_per_browser": 32,
+      "api_token_location": "Worker_secret_only",
+      "native_mac_helper_supported": false
+    }
   },
   "limitations": [
-    "Team name, public interactive UI URL, demo video and submission receipt are unconfirmed.",
+    "Team name, demo video and submission receipt are unconfirmed; public interactive UI is deployed.",
     "Actual dots account authorization, subscription, webhook delivery and notifications remain unverified.",
     "Mac remote control was tested with virtual video, not a physical camera.",
     "Reachy physical camera-to-motion/audio was verified under historical five-second settings; current two-second physical retest and standalone continuation are unverified.",
@@ -412,7 +493,8 @@
     "Reachy and CoreS3 adapters for Events remote monitoring control are not implemented.",
     "Image classification accuracy, real-world latency distributions and productivity benefits are not statistically measured.",
     "A physical two-second notification deadline is not guaranteed.",
-    "DOTS frontend real phone holding to positive notification, OS toast display and long-running background behavior remain unverified; its mascot is separate from ChatGPT dots MCP integration."
+    "DOTS frontend real phone holding to positive notification, OS toast display and long-running background behavior remain unverified; its mascot is separate from ChatGPT dots MCP integration.",
+    "Published frontend login and live inference were verified using fake camera input; anonymous demo mode final E2E and physical camera retest remain unverified."
   ],
   "event": {
     "source_url": "https://luma.com/OpenAIDevDay2026CommunityHackathonTokyo",
@@ -426,6 +508,7 @@
     "README.md",
     "docs/evaluation.md",
     "docs/submission.md",
-    "docs/demo.md"
+    "docs/demo.md",
+    "cloudflare-web/README.md"
   ]
 }

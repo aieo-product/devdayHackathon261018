@@ -48,14 +48,15 @@ cd devdayHackathon261018
 | [共通判定API](https://focus-shared-api-20261018.take-otani.workers.dev/) | APIと仕様への入口。操作画面ではありません |
 | [公開仕様書](https://focus-shared-api-20261018.take-otani.workers.dev/docs) / [OpenAPI](https://focus-shared-api-20261018.take-otani.workers.dev/openapi.json) | 認証不要で閲覧できるHTTP契約・状態・2秒判定条件 |
 | [Events MCP](https://focus-events-20261018.take-otani.workers.dev/mcp) / [Events手順](cloudflare-events/README.md) | OAuthで接続するイベント・端末制御API。ブラウザで開く操作画面ではありません |
-| [DOTSフロント](focus-dopa-preview/README.md) | キャラクター・音・トースト・小窓。`npm run start:front` → `http://127.0.0.1:4327`。カメラ不要の33秒デモあり |
+| [公開DOTS画面](https://focus-web-20261018.take-otani.workers.dev/) / [表示デモ](https://focus-web-20261018.take-otani.workers.dev/?demo=1&pattern=fever&character=green) | チームコードで実判定、表示デモはログイン・API・カメラ不要。[公開手順](cloudflare-web/README.md) |
+| [ローカルDOTSフロント](focus-dopa-preview/README.md) | キャラクター・音・トースト・小窓。`npm run start:front` → `http://127.0.0.1:4327`。カメラ不要の33秒デモあり |
 | [Mac確認UI](tools/mac-camera-check/README.md) | カメラ→共通API→画面通知、遠隔ON/OFF。起動後は `http://127.0.0.1:3000` |
 | [Reachy本体アプリ](src/reachy_focus/) / [実機検証記録](docs/reachy/validation.md) | 本体カメラと公式fear1の動作・音声。導入手順は本README後半 |
 | [公開リポジトリ](https://github.com/aieo-product/devdayHackathon261018) | ソース、テスト、評価資料 |
 
 MCP・遠隔監視の追加仕様は[リポジトリの共通API仕様書](cloudflare/API仕様書.md)が最新です。公開 `/docs` はWorkerの最終配備時点の文書であり、資料更新だけでは差し替わりません。
 
-`/v1/*`の画像判定にはチームから受け取るアプリトークンが必要です。OpenAIキーはサーバー専用です。**公開操作UI・デモ動画・提出受付のURLは未確認**で、localhostやReachyのLAN内URLは外部の評価者が直接開ける提出URLにはなりません。公開APIのhealthは設定状態の確認であり、画像認識精度を証明しません。
+`/v1/*`の画像判定にはチームから受け取るアプリトークンが必要です。OpenAIキーはサーバー専用です。公開操作UIは上記URLで利用できます。実判定には別経路で共有するチームコードでログインし、カメラを明示的に有効化します。トークンはWorkerだけが保持します。**デモ動画・提出受付は未確認**です。localhostやReachyのLAN内URLは外部から開ける提出URLではありません。公開APIのhealthは設定状態の確認であり、画像認識精度を証明しません。
 
 ## 利用体験と審査観点
 
@@ -81,12 +82,13 @@ Reachyのダンス中は例外として、最初の新しいスマホ保持判�
 
 | 対象 | 確認済み | 残っている確認 |
 | --- | --- | --- |
-| API・Worker・Mac・Events・DOTSフロント | 自動テスト計236件（API/クライアント37、既存Worker1、Mac51、Events68、フロント79）通過 | 実環境の遅延分布・認識精度の統計評価 |
+| 過去のmain整備時 | 自動テスト計236件（API/クライアント37、既存Worker1、Mac51、Events68、フロント79）通過 | 実環境の遅延分布・認識精度の統計評価 |
+| 公開化作業の追加確認 | フロント99件（従来79＋認証15＋表示モード4＋再生回帰1）、公開Worker17件通過。URL200、秘密ファイル404、ログイン・health・セッション201 | 公開ブラウザ＋仮想カメラで7画像・実OpenAI通知2回、停止・ログアウト失効を確認。匿名デモの最終確認は継続中。既存API等157件は今回再実行せず、合算273件相当を一括再実行した主張ではない |
 | DOTSフロント | カメラ不要の演出デモ、実カメラ送信と `observing` 応答、小窓・macOS補助表示の担当記録 | 実物スマホ保持→陽性通知、OSトーストの実表示、長時間バックグラウンド動作は未確認 |
 | Macの2秒・繰り返し通知 | Chrome仮想カメラ＋実OpenAIで同一セッション2回通知。保持2534ms / 2386ms | 仮想入力の結果を物理カメラの再試験と混同しない |
 | MCP Events・監視ON/OFF | 公開Events疎通12項目、仮想カメラ＋実APIのブラウザE2E 7項目通過。通知2件の履歴一致、遠隔OFF後の撮影停止・適用確認 | 実dotsのOAuth接続・購読・通知、Reachy/CoreS3の遠隔監視アダプター |
 | Reachy Mini Wireless | 本体実画像→公開API→5313ms保持検知→fear1の動作・音声→時間終了を確認 | この実機記録は旧5秒条件。現行2秒の実機再試験、ページ/Macを閉じた単独継続は未確認 |
-| Reachy 0.3.0の追加機能 | 10秒の非保持でdance1、最初の保持判定でダンス中断・fear1へ切替。cheerful1、日本語声かけ、基準姿勢復帰も収録。担当記録にPython47件成功 | ダンス中の実画像検知と動きの見た目は未確認。[変更と試験範囲](docs/reachy/dance.md)。Python試験は今回の236件に含まない |
+| Reachy 0.3.0の追加機能 | 10秒の非保持でdance1、最初の保持判定でダンス中断・fear1へ切替。cheerful1、日本語声かけ、基準姿勢復帰も収録。担当記録にPython47件成功 | ダンス中の実画像検知と動きの見た目は未確認。[変更と試験範囲](docs/reachy/dance.md)。Python試験は過去main整備時の236件に含まない |
 | CoreS3 | ビルド・USB書込み・起動に加え、実画像5枚を送りスマホ保持を2回検出した担当報告あり。HTTPS接続再利用の改善を統合 | 観測間隔が2.5秒を超えて保持時間がリセットし、通知・ビープまで未達。[最新試験記録](devices/cores3/README.md#実画像試験の担当報告2026-10-18) |
 
 詳しい試験条件・制約は[評価資料](docs/evaluation.md)、端末ごとの記録は[Reachy](docs/reachy/validation.md)・[CoreS3](devices/cores3/README.md)を参照してください。検知確率1.0はモデルの出力値であり、認識精度100%を意味しません。
@@ -113,6 +115,10 @@ npm run start:mac-check
 `http://127.0.0.1:3000` を開き、本人が開始・カメラ許可を選びます。実APIモードでは画像をOpenAIへ送信します。[APIキー不要のモック試験](docs/evaluation.md#ローカル再現追加のapi利用なしで確認する)、[公開APIの疎通手順](cloudflare/README.md)、[Events疎通手順](cloudflare-events/README.md)も利用できます。
 
 ## DOTSフロントの起動とレビュー
+
+通常の公式URLはクエリなしの [公開画面](https://focus-web-20261018.take-otani.workers.dev/) です。通常画面にはデモパネル・テストボタンを出しません。演出確認は別の [デモモード](https://focus-web-20261018.take-otani.workers.dev/?demo=1&pattern=fever&character=green) を開きます。`?showcase=1` は互換用の別名です。デモは認証・カメラ・APIを使わない表示用で、匿名経路の最終検証は継続中です。
+
+[公開画面](https://focus-web-20261018.take-otani.workers.dev/)と[認証不要の表示デモ](https://focus-web-20261018.take-otani.workers.dev/?demo=1&pattern=fever&character=green)を利用できます。公開版はネイティブMac補助表示に接続せず、Web画面・対応ブラウザの小窓を使います。チームログインは12時間のHttpOnly Cookieで、セッション所有はブラウザの認証単位に分離します。[公開Workerの設定・配備](cloudflare-web/README.md)を参照してください。
 
 PCブラウザ向けの追加フロントを `focus-dopa-preview/` に用意しました。このDOTSは独自のキャラクター画面で、ChatGPT dotsへのMCP接続・購読・通知とは別です。DOTS1体、動くトースト、警告音、全画面リリック、Chromeの小窓、macOS用のデスクトップ表示補助アプリを含みます。
 
