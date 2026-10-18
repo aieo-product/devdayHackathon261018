@@ -8,6 +8,9 @@ const IMAGE_LIMIT = 1024 * 1024;
 const STATIC_FILES = new Map([
   ['/', ['public/index.html', 'text/html; charset=utf-8']],
   ['/app.mjs', ['public/app.mjs', 'text/javascript; charset=utf-8']],
+  ['/remote-control.mjs', ['public/remote-control.mjs', 'text/javascript; charset=utf-8']],
+  ['/mcp/setup', ['public/mcp-setup.html', 'text/html; charset=utf-8']],
+  ['/mcp-setup.mjs', ['public/mcp-setup.mjs', 'text/javascript; charset=utf-8']],
   ['/style.css', ['public/style.css', 'text/css; charset=utf-8']],
   ['/focus-client.mjs', ['../../clients/focus-client.mjs', 'text/javascript; charset=utf-8']],
 ]);
@@ -34,14 +37,15 @@ export function parsePort(value = '3000') {
   return Number(value);
 }
 
-function validateApiUrl(value, allowLoopbackHttp) {
+function validateApiUrl(value, allowLoopbackHttp, name = 'FOCUS_API_URL') {
   if (!value) return null;
   let url;
-  try { url = new URL(value); } catch { throw new TypeError('FOCUS_API_URL must be a valid HTTPS URL.'); }
+  try { url = new URL(value); } catch { throw new TypeError(`${name} must be a valid HTTPS URL.`); }
   const localHttp = allowLoopbackHttp && url.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
   if ((url.protocol !== 'https:' && !localHttp) || url.username || url.password || url.search || url.hash) {
-    throw new TypeError('FOCUS_API_URL must be HTTPS without credentials, a query, or a fragment.');
+    throw new TypeError(`${name} must be HTTPS without credentials, a query, or a fragment.`);
   }
+  if (name === 'FOCUS_EVENTS_URL' && url.pathname !== '/') throw new TypeError('FOCUS_EVENTS_URL must be an origin without a path.');
   return url.href.replace(/\/$/, '');
 }
 
@@ -91,6 +95,38 @@ function readBody(req, limit) {
   });
 }
 
+async function readJsonObject(req) {
+  const contentType = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+  if (contentType !== 'application/json') throw new RequestError(415, 'unsupported_media_type', 'JSONを送信してください。');
+  const body = await readBody(req, JSON_LIMIT);
+  try {
+    const value = JSON.parse(body.toString());
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error();
+    return value;
+  } catch { throw new RequestError(400, 'invalid_request', 'JSONオブジェクトを送信してください。'); }
+}
+
+const deviceIdentifier = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(value);
+const deviceStates = new Set(['on', 'off', 'blocked', 'error']);
+const deviceErrors = {
+  device_not_found: '端末が見つかりません。端末側の確認画面を開いてください。',
+  device_offline: '端末がオフラインです。端末側の確認画面を表示してください。',
+  remote_disabled: '端末側でリモート操作を許可してください。',
+  future_revision: '端末の状態を同期できませんでした。画面を再読み込みしてください。',
+  device_capacity: '接続できる端末数の上限に達しました。',
+  invalid_device_request: '端末の操作内容が正しくありません。',
+};
+
+function publicDevice(value) {
+  if (!value || !deviceIdentifier(value.device_id) || !['on', 'off'].includes(value.desired_state)
+    || !deviceStates.has(value.observed_state) || typeof value.remote_enabled !== 'boolean'
+    || typeof value.online !== 'boolean' || !Number.isSafeInteger(value.revision) || value.revision < 0
+    || !Number.isSafeInteger(value.applied_revision) || value.applied_revision < 0) throw new Error('Invalid device response');
+  const result = {};
+  for (const key of ['device_id', 'name', 'type', 'desired_state', 'observed_state', 'remote_enabled', 'revision', 'applied_revision', 'last_seen_at', 'online', 'command_issued_at', 'command_expires_at', 'session_id']) result[key] = value[key] ?? null;
+  return result;
+}
+
 function proxyRoute(method, path) {
   if (method === 'GET' && path === '/api/health') return { path: '/health' };
   if (method === 'POST' && path === '/api/v1/sessions') return { path: '/v1/sessions', limit: JSON_LIMIT, types: ['application/json'] };
@@ -103,10 +139,75 @@ function proxyRoute(method, path) {
   return null;
 }
 
+// Independent, bounded best-effort delivery. Images never enter this queue.
+function createEventRelay({ baseUrl, token, sourceId, fetchImpl }) {
+  const queue = [], seen = new Set();
+  let closed = false, busy = false, retryTimer, timeout, controller;
+  const finish = () => { queue.shift(); busy = false; void drain(); };
+  async function drain() {
+    if (closed || busy || !queue.length) return;
+    busy = true;
+    const item = queue[0];
+    controller = new AbortController();
+    timeout = setTimeout(() => controller?.abort(), 5_000);
+    timeout.unref();
+    let retry = false, delivered = false;
+    try {
+      const response = await fetchImpl(`${baseUrl}/events/ingest`, {
+        method: 'POST', headers: new Headers({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }),
+        body: item.body, signal: controller.signal, redirect: 'error', credentials: 'omit', cache: 'no-store',
+      });
+      delivered = response.ok;
+      retry = response.status === 408 || response.status === 429 || response.status >= 500;
+      await response.body?.cancel().catch(() => {});
+    } catch { retry = true; }
+    finally { clearTimeout(timeout); controller = null; }
+    if (closed) return;
+    item.attempts += 1;
+    if (retry && item.attempts < 3) {
+      retryTimer = setTimeout(() => { busy = false; void drain(); }, 250 * 2 ** (item.attempts - 1));
+      retryTimer.unref();
+      return;
+    }
+    if (!delivered) console.warn('Focus events: metadata delivery failed; camera detection continues.');
+    finish();
+  }
+  return {
+    enqueue(snapshot) {
+      const id = snapshot?.notification_id;
+      if (closed || snapshot?.notify !== true || typeof id !== 'string' || !/^[a-zA-Z0-9_.:-]{1,128}$/.test(id) || seen.has(id)) return;
+      if (queue.length >= 64) {
+        console.warn('Focus events: metadata queue is full; camera detection continues.');
+        return;
+      }
+      seen.add(id);
+      if (seen.size > 1024) seen.delete(seen.values().next().value);
+      const data = { notification_id: id, session_id: snapshot.session_id, device_type: 'mac' };
+      for (const name of ['continuous_hold_ms', 'required_hold_ms', 'phone_probability', 'observable_probability']) {
+        data[name] = Number.isFinite(snapshot[name]) ? snapshot[name] : null;
+      }
+      data.provider = typeof snapshot.provider === 'string' ? snapshot.provider.slice(0, 80) : null;
+      queue.push({ attempts: 0, body: JSON.stringify({ source_id: sourceId, event: {
+        eventId: id, name: 'focus.phone_held', timestamp: new Date().toISOString(), data, cursor: null,
+      } }) });
+      void drain();
+    },
+    close() {
+      closed = true;
+      clearTimeout(retryTimer); clearTimeout(timeout); controller?.abort();
+      queue.length = 0; seen.clear();
+    },
+  };
+}
+
 /** Credentials stay in this loopback process; the page only sees API responses. */
 export function createCameraCheckServer({
   apiUrl = process.env.FOCUS_API_URL,
   apiToken = process.env.FOCUS_API_TOKEN,
+  eventsUrl = process.env.FOCUS_EVENTS_URL,
+  eventsToken = process.env.FOCUS_EVENTS_TOKEN,
+  sourceId = process.env.FOCUS_SOURCE_ID,
+  deviceId = process.env.FOCUS_DEVICE_ID,
   fetchImpl = globalThis.fetch,
   allowLoopbackHttp = false,
 } = {}) {
@@ -114,6 +215,14 @@ export function createCameraCheckServer({
   const token = typeof apiToken === 'string' ? apiToken.trim() : '';
   if (/[\r\n]/.test(token)) throw new TypeError('FOCUS_API_TOKEN contains an invalid line break.');
   const configured = Boolean(upstreamBase && token);
+  const eventsBase = validateApiUrl(eventsUrl, allowLoopbackHttp, 'FOCUS_EVENTS_URL');
+  const relayToken = typeof eventsToken === 'string' ? eventsToken.trim() : '';
+  if (/[\r\n]/.test(relayToken)) throw new TypeError('FOCUS_EVENTS_TOKEN contains an invalid line break.');
+  if (sourceId && !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(sourceId)) throw new TypeError('FOCUS_SOURCE_ID must be a UUID.');
+  const localDeviceId = deviceId || sourceId;
+  if (localDeviceId && !deviceIdentifier(localDeviceId)) throw new TypeError('FOCUS_DEVICE_ID must contain 1 to 128 identifier characters.');
+  const eventsConfigured = Boolean(eventsBase && relayToken && sourceId);
+  const relay = eventsConfigured ? createEventRelay({ baseUrl: eventsBase, token: relayToken, sourceId, fetchImpl }) : null;
   const server = http.createServer(async (req, res) => {
     for (const [name, value] of Object.entries(SECURITY_HEADERS)) res.setHeader(name, value);
     const controller = new AbortController();
@@ -138,7 +247,61 @@ export function createCameraCheckServer({
         return;
       }
       if (req.method === 'GET' && req.url === '/config') {
-        sendJson(res, 200, { configured, api_url: upstreamBase });
+        sendJson(res, 200, { configured, api_url: upstreamBase, events: { configured: eventsConfigured, mcp_url: eventsConfigured ? `${eventsBase}/mcp` : null, device_id: eventsConfigured ? localDeviceId : null } });
+        return;
+      }
+      if (req.method === 'POST' && ['/devices/heartbeat', '/devices/list', '/devices/control'].includes(req.url)) {
+        if (!eventsConfigured) throw new RequestError(503, 'events_not_configured', 'MCP Eventsのローカル設定がありません。');
+        const input = await readJsonObject(req);
+        const allowed = req.url === '/devices/list' ? [] : req.url === '/devices/control' ? ['device_id', 'enabled'] : ['name', 'observed_state', 'remote_enabled', 'applied_revision', 'session_id'];
+        if (Object.keys(input).some(key => !allowed.includes(key))) throw new RequestError(400, 'invalid_device_request', deviceErrors.invalid_device_request);
+        let value;
+        if (req.url === '/devices/heartbeat') {
+          if (!deviceStates.has(input.observed_state) || typeof input.remote_enabled !== 'boolean'
+            || !Number.isSafeInteger(input.applied_revision) || input.applied_revision < 0
+            || (input.session_id !== undefined && input.session_id !== null && !deviceIdentifier(input.session_id))
+            || (input.name !== undefined && (typeof input.name !== 'string' || !input.name.trim() || input.name.length > 80 || /[\u0000-\u001f\u007f]/u.test(input.name)))) throw new RequestError(400, 'invalid_device_request', deviceErrors.invalid_device_request);
+          value = { ...input, source_id: sourceId, device_id: localDeviceId, device_type: 'mac' };
+        } else if (req.url === '/devices/control') {
+          if (!deviceIdentifier(input.device_id) || typeof input.enabled !== 'boolean') throw new RequestError(400, 'invalid_device_request', deviceErrors.invalid_device_request);
+          value = { source_id: sourceId, device_id: input.device_id, enabled: input.enabled };
+        } else value = { source_id: sourceId };
+        timer = setTimeout(() => controller.abort(), 8_000); timer.unref();
+        const response = await fetchImpl(`${eventsBase}${req.url}`, {
+          method: 'POST', headers: new Headers({ Authorization: `Bearer ${relayToken}`, 'Content-Type': 'application/json' }),
+          body: JSON.stringify(value), signal: controller.signal, redirect: 'error', credentials: 'omit', cache: 'no-store',
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          const code = result?.error?.code;
+          if (Object.hasOwn(deviceErrors, code)) throw new RequestError([400, 404, 409, 429].includes(response.status) ? response.status : 502, code, deviceErrors[code]);
+          throw new RequestError(502, 'device_service_unavailable', '端末サービスに接続できませんでした。検知APIはそのまま利用できます。');
+        }
+        if (req.url === '/devices/list') {
+          if (!Array.isArray(result.devices) || result.devices.length > 200) throw new Error('Invalid device list');
+          sendJson(res, 200, { devices: result.devices.map(publicDevice) });
+        } else sendJson(res, 200, publicDevice(result));
+        return;
+      }
+      if (req.method === 'POST' && req.url === '/mcp/pairing') {
+        if (!eventsConfigured) throw new RequestError(503, 'events_not_configured', 'MCP Eventsのローカル設定がありません。');
+        const contentType = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+        if (contentType !== 'application/json') throw new RequestError(415, 'unsupported_media_type', 'JSONを送信してください。');
+        const requestBody = await readBody(req, JSON_LIMIT);
+        try {
+          const parsed = JSON.parse(requestBody.toString());
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || Object.keys(parsed).length) throw new Error();
+        } catch { throw new RequestError(400, 'invalid_request', '空のJSONオブジェクトを送信してください。'); }
+        timer = setTimeout(() => controller.abort(), 10_000); timer.unref();
+        const response = await fetchImpl(`${eventsBase}/admin/pairing`, {
+          method: 'POST', headers: new Headers({ Authorization: `Bearer ${relayToken}`, 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ source_id: sourceId }), signal: controller.signal,
+          redirect: 'error', credentials: 'omit', cache: 'no-store',
+        });
+        if (!response.ok) throw new RequestError(502, 'pairing_unavailable', '接続コードを発行できませんでした。MCP Eventsの設定を確認してください。');
+        const value = await response.json();
+        if (typeof value.code !== 'string' || !value.code.trim() || value.code.length > 128 || !Number.isFinite(Date.parse(value.expires_at)) || Date.parse(value.expires_at) <= Date.now()) throw new Error('Invalid pairing response');
+        sendJson(res, 200, { code: value.code, expires_at: value.expires_at });
         return;
       }
       const route = proxyRoute(req.method, req.url);
@@ -164,6 +327,9 @@ export function createCameraCheckServer({
       if (res.destroyed) return;
       res.writeHead(response.status, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(payload);
+      if (relay && response.ok && route.path.endsWith('/frames')) {
+        try { relay.enqueue(JSON.parse(payload.toString('utf8'))); } catch { /* Optional delivery never affects API responses. */ }
+      }
     } catch (error) {
       if (!res.destroyed && !res.writableEnded) {
         const known = error instanceof RequestError;
@@ -182,6 +348,7 @@ export function createCameraCheckServer({
   server.requestTimeout = 30_000;
   server.headersTimeout = 15_000;
   server.keepAliveTimeout = 5_000;
+  server.once('close', () => relay?.close());
   return server;
 }
 
