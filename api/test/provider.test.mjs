@@ -36,6 +36,9 @@ test('OpenAI adapter uses named predicates and server key; raw images are encode
   const body = JSON.parse(sent.body);
   assert.equal(body.model, 'gpt-6-luna');
   assert.deepEqual(body.questions.map(({ name }) => name), ['observable', 'phone_use']);
+  assert.match(body.questions[0].instructions, /holding a smartphone in a hand/);
+  assert.match(body.questions[1].instructions, /even if they are not looking at or operating it/);
+  assert.match(body.questions[1].instructions, /merely lying on the desk is false/);
   assert.match(body.input[0].content[1].image_url, /^data:image\/jpeg;base64,/);
   assert.equal(result.phoneProbability, 0.9);
 });

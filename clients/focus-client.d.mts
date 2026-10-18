@@ -8,6 +8,8 @@ export interface FocusSnapshot {
   phone_probability: number | null;
   observable_probability: number | null;
   consecutive_count: number;
+  continuous_hold_ms: number;
+  required_hold_ms: number;
   cooldown_remaining_ms: number;
   next_capture_after_ms: number;
   provider: 'openai' | 'mock';

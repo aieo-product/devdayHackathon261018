@@ -7,14 +7,16 @@ import { FocusEngine } from '../api/src/engine.mjs';
 const image = new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jyaUAAAAASUVORK5CYII=', 'base64')], { type: 'image/png' });
 const snapshot = (patch = {}) => ({ session_id: 'test-session', state: 'observing', notify: false,
   notification_id: null, message: null, phone_probability: null, observable_probability: null,
-  consecutive_count: 0, cooldown_remaining_ms: 0, next_capture_after_ms: 0, provider: 'mock', reason: 'test', ...patch });
+  consecutive_count: 0, continuous_hold_ms: 0, required_hold_ms: 5000,
+  cooldown_remaining_ms: 0, next_capture_after_ms: 0, provider: 'mock', reason: 'test', ...patch });
 const response = (data) => new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
 test('thin client works against real HTTP app: notification, duplicate, pause, resume and end', async (t) => {
   let calls = 0;
+  let now = 0;
   const engine = new FocusEngine({
     provider: { name: 'mock', configured: true, async decide() { calls += 1; return { phoneProbability: 0.99, observableProbability: 1 }; } },
-    settings: { captureIntervalMs: 0 },
+    clock: () => now,
   });
   const server = createApp({ config: { apiToken: 'test-only-token' }, engine });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -22,13 +24,18 @@ test('thin client works against real HTTP app: notification, duplicate, pause, r
   const client = new FocusClient({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: 'test-only-token' });
   await client.start({ deviceType: 'mac' });
   assert.equal(client.active, true);
-  assert.equal((await client.frame(image)).notify, false);
-  assert.equal((await client.frame(image)).notify, false);
-  const third = await client.frame(image, { frameId: 'third' });
-  assert.equal(third.notify, true);
-  assert.ok(third.notification_id);
-  assert.equal((await client.frame(image, { frameId: 'third' })).notify, false);
-  assert.equal(calls, 3);
+  for (now = 0; now < 5000; now += 1000) {
+    const pending = await client.frame(image);
+    assert.equal(pending.notify, false);
+    assert.equal(pending.continuous_hold_ms, now);
+    assert.equal(pending.required_hold_ms, 5000);
+  }
+  const confirmed = await client.frame(image, { frameId: 'confirmed' });
+  assert.equal(confirmed.notify, true);
+  assert.equal(confirmed.continuous_hold_ms, 5000);
+  assert.ok(confirmed.notification_id);
+  assert.equal((await client.frame(image, { frameId: 'confirmed' })).notify, false);
+  assert.equal(calls, 6);
   assert.equal((await client.pause()).state, 'paused');
   assert.equal(client.active, false);
   assert.equal(await client.frame(image), null);
@@ -100,12 +107,13 @@ test('a failed pause still stops locally and preserves an error for the UI', asy
 
 test('local duration stops capture without needing another API response', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
-  const client = new FocusClient({ baseUrl: 'https://api.example.test', token: 'test-only-token', fetchImpl: async () => response(snapshot()) });
+  const client = new FocusClient({ baseUrl: 'https://api.example.test', token: 'test-only-token', fetchImpl: async () => response(snapshot({ continuous_hold_ms: 4000 })) });
   await client.start({ durationSeconds: 1 });
   assert.equal(client.active, true);
   t.mock.timers.tick(1001);
   assert.equal(client.active, false);
   assert.equal(client.snapshot.state, 'ended');
+  assert.equal(client.snapshot.continuous_hold_ms, 0);
   assert.equal(await client.frame(image), null);
 });
 

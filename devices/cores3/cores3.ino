@@ -19,7 +19,7 @@
 #include "config.example.h"
 #endif
 
-// The server owns detection thresholds, consecutive counts, and cooldowns.
+// The server owns continuous-hold timing, detection thresholds, and cooldowns.
 constexpr uint32_t WIFI_TIMEOUT_MS = 20000;
 constexpr uint32_t CLOCK_TIMEOUT_MS = 10000;
 constexpr uint32_t RETRY_DELAY_MS = 3000;
@@ -45,6 +45,8 @@ struct Snapshot {
   String notificationId;
   bool mock = false;
   bool notify = false;
+  uint32_t continuousHoldMs = 0;
+  uint32_t requiredHoldMs = 0;
   uint32_t nextCaptureMs = RETRY_DELAY_MS;
 };
 
@@ -190,6 +192,8 @@ bool parseSnapshot(const String& body, Snapshot& result) {
   if (deserializeJson(doc, body, DeserializationOption::NestingLimit(6))) return false;
   if (!doc["session_id"].is<const char*>() || !doc["state"].is<const char*>() ||
       !doc["provider"].is<const char*>() || !doc["notify"].is<bool>() ||
+      !doc["continuous_hold_ms"].is<uint32_t>() ||
+      !doc["required_hold_ms"].is<uint32_t>() ||
       !doc["next_capture_after_ms"].is<uint32_t>()) return false;
   result.sessionId = doc["session_id"].as<const char*>();
   result.state = doc["state"].as<const char*>();
@@ -202,7 +206,10 @@ bool parseSnapshot(const String& body, Snapshot& result) {
   result.mock = provider == "mock";
   result.notify = doc["notify"].as<bool>();
   result.notificationId = doc["notification_id"] | "";
+  result.continuousHoldMs = doc["continuous_hold_ms"].as<uint32_t>();
+  result.requiredHoldMs = doc["required_hold_ms"].as<uint32_t>();
   result.nextCaptureMs = doc["next_capture_after_ms"].as<uint32_t>();
+  if (result.requiredHoldMs != 5000) return false;
   // millis() comparisons require a delay below half its uint32_t range.
   if (result.nextCaptureMs > 86400000UL) return false;
   return !result.notify || !result.notificationId.isEmpty();
@@ -328,8 +335,14 @@ void showSnapshot(const Command& command, const Snapshot& snapshot, String& last
   else if (snapshot.state == "suspected") status = "CHECKING";
   else if (snapshot.state == "cooldown") status = "COOLDOWN";
   else if (snapshot.state == "paused") status = "PAUSED";
-  publish(command, status, snapshot.mock ? "Simulated judgment" : "Server judgment",
-          snapshot.mock, alert);
+  // Display only API-observed progress. Do not advance it or trigger alerts locally.
+  char detail[48];
+  snprintf(detail, sizeof(detail), "Hold %lu.%lu / %lu.%lu s (API)",
+           static_cast<unsigned long>(snapshot.continuousHoldMs / 1000),
+           static_cast<unsigned long>((snapshot.continuousHoldMs / 100) % 10),
+           static_cast<unsigned long>(snapshot.requiredHoldMs / 1000),
+           static_cast<unsigned long>((snapshot.requiredHoldMs / 100) % 10));
+  publish(command, status, detail, snapshot.mock, alert);
 }
 
 void worker(void*) {

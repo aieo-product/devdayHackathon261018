@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { HttpError, DecisionError } from './errors.mjs';
 
 export const DEFAULT_SETTINGS = Object.freeze({
-  captureIntervalMs: 3000,
+  captureIntervalMs: 1000,
   phoneThreshold: 0.8,
   observableThreshold: 0.7,
-  requiredConsecutive: 3,
+  requiredHoldMs: 5000,
   cooldownMs: 60_000,
-  maxSampleGapMs: 10_000,
+  maxSampleGapMs: 2500,
   decisionTimeoutMs: 10_000,
   maxResultAgeMs: 10_000,
   retentionMs: 30 * 60_000,
@@ -48,7 +48,7 @@ export class FocusEngine {
       createdAt: now, expiresAt: now + durationSeconds * 1000, endedAt: null,
       generation: 0, inFlight: null, seenFrames: new Set(),
       phoneProbability: null, observableProbability: null,
-      count: 0, cooldownUntil: 0, lastAcceptedAt: null, lastSampleAt: null,
+      count: 0, holdStartedAt: null, continuousHoldMs: 0, cooldownUntil: 0, lastAcceptedAt: null, lastSampleAt: null,
       reason: 'session_started',
     };
     this.sessions.set(session.id, session);
@@ -74,15 +74,31 @@ export class FocusEngine {
       session.reason = 'session_expired';
     } else if (session.state === 'cooldown' && now >= session.cooldownUntil) {
       session.state = 'observing';
-      session.count = 0;
+      this.resetHold(session);
       session.lastSampleAt = null;
       session.reason = 'cooldown_finished';
     }
   }
 
+  resetHold(session) {
+    session.count = 0;
+    session.holdStartedAt = null;
+    session.continuousHoldMs = 0;
+  }
+
+  captureRemaining(session) {
+    if (session.lastAcceptedAt === null) return 0;
+    let deadline = session.lastAcceptedAt + this.settings.captureIntervalMs;
+    if (session.state === 'suspected' && session.holdStartedAt !== null) {
+      // The final fresh sample may land exactly on the hold threshold.
+      deadline = Math.min(deadline, session.holdStartedAt + this.settings.requiredHoldMs);
+    }
+    return Math.max(0, deadline - this.clock());
+  }
+
   invalidate(session) {
     session.generation += 1;
-    session.count = 0;
+    this.resetHold(session);
     session.lastSampleAt = null;
     session.phoneProbability = null;
     session.observableProbability = null;
@@ -94,7 +110,7 @@ export class FocusEngine {
     this.refresh(session);
     const active = activeStates.has(session.state);
     const cooldownRemaining = Math.max(0, session.cooldownUntil - this.clock());
-    const captureRemaining = session.lastAcceptedAt === null ? 0 : Math.max(0, this.settings.captureIntervalMs - (this.clock() - session.lastAcceptedAt));
+    const captureRemaining = this.captureRemaining(session);
     const result = {
       session_id: session.id,
       state: session.state,
@@ -104,6 +120,8 @@ export class FocusEngine {
       phone_probability: session.phoneProbability,
       observable_probability: session.observableProbability,
       consecutive_count: session.count,
+      continuous_hold_ms: session.continuousHoldMs,
+      required_hold_ms: this.settings.requiredHoldMs,
       cooldown_remaining_ms: session.state === 'ended' ? 0 : cooldownRemaining,
       next_capture_after_ms: active ? Math.max(captureRemaining, cooldownRemaining) : 0,
       provider: this.provider.name,
@@ -163,11 +181,11 @@ export class FocusEngine {
     session.seenFrames.add(frameId);
     if (session.state === 'cooldown') return this.snapshot(session, { reason: 'cooldown_active' });
     const now = this.clock();
-    if (session.lastAcceptedAt !== null && now - session.lastAcceptedAt < this.settings.captureIntervalMs) {
+    if (this.captureRemaining(session) > 0) {
       return this.snapshot(session, { reason: 'capture_too_soon' });
     }
     session.lastAcceptedAt = now;
-    if (session.lastSampleAt === null || now - session.lastSampleAt > this.settings.maxSampleGapMs) session.count = 0;
+    if (session.lastSampleAt === null || now - session.lastSampleAt > this.settings.maxSampleGapMs) this.resetHold(session);
     const flight = { controller: new AbortController(), generation: session.generation };
     session.inFlight = flight;
     let timer;
@@ -199,12 +217,14 @@ export class FocusEngine {
       session.observableProbability = result.observableProbability;
       session.lastSampleAt = now;
       if (result.observableProbability < this.settings.observableThreshold) {
-        session.count = 0;
+        this.resetHold(session);
         session.state = 'unknown';
         session.reason = 'insufficient_visibility';
       } else if (result.phoneProbability >= this.settings.phoneThreshold) {
         session.count += 1;
-        if (session.count >= this.settings.requiredConsecutive) {
+        session.holdStartedAt ??= now;
+        session.continuousHoldMs = now - session.holdStartedAt;
+        if (session.continuousHoldMs >= this.settings.requiredHoldMs) {
           session.state = 'cooldown';
           session.cooldownUntil = this.clock() + this.settings.cooldownMs;
           session.count = 0;
@@ -216,7 +236,7 @@ export class FocusEngine {
         session.state = 'suspected';
         session.reason = 'phone_use_suspected';
       } else {
-        session.count = 0;
+        this.resetHold(session);
         session.state = 'observing';
         session.reason = 'phone_use_not_detected';
       }
@@ -227,7 +247,7 @@ export class FocusEngine {
         return this.snapshot(session, { reason: 'session_changed' });
       }
       session.state = 'unknown';
-      session.count = 0;
+      this.resetHold(session);
       session.lastSampleAt = null;
       session.phoneProbability = null;
       session.observableProbability = null;

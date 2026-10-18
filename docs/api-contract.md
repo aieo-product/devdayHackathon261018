@@ -1,6 +1,6 @@
 # 共通判定API契約
 
-Mac・Reachy Mini Wireless・CoreS3は、自分で撮影した画像をこのAPIへ送ります。APIがスマホ操作の判定、連続回数、通知間隔、セッション状態を管理します。端末はAPIが返した`notify: true`を、自機のOS通知・音・動きに変換します。端末側に独自のしきい値を持たせません。
+Mac・Reachy Mini Wireless・CoreS3は、自分で撮影した画像をこのAPIへ送ります。APIがスマホを手に持つ状態の判定、5秒間の継続保持、通知間隔、セッション状態を管理します。端末はAPIが返した`notify: true`を、自機のOS通知・音・動きに変換します。端末側に独自のしきい値を持たせません。
 
 ## 接続と認証
 
@@ -91,6 +91,8 @@ X-Frame-Id: cores3-000001
   "phone_probability": 0.95,
   "observable_probability": 0.99,
   "consecutive_count": 0,
+  "continuous_hold_ms": 5000,
+  "required_hold_ms": 5000,
   "cooldown_remaining_ms": 60000,
   "next_capture_after_ms": 60000,
   "provider": "openai",
@@ -105,9 +107,11 @@ X-Frame-Id: cores3-000001
 | `notify` | boolean | この応答を受けた端末が新しい通知を実行するか |
 | `notification_id` | string / null | `notify: true`のときの通知ID。端末でも重複実行を防ぐ |
 | `message` | string / null | `notify: true`のときの通知文 |
-| `phone_probability` | number / null | 観測画像でスマホを操作している確率、0〜1。未判定／判定失敗時はnull |
+| `phone_probability` | number / null | 観測画像でスマホを手に持っている確率、0〜1。未判定／判定失敗時はnull |
 | `observable_probability` | number / null | 対象の人・手元を判断できる可視性の確率、0〜1。未判定／判定失敗時はnull |
-| `consecutive_count` | integer | 連続した候補検出回数。通知時・非検出・判定不能・停止で0へ戻る |
+| `consecutive_count` | integer | 互換用の連続候補検出回数。通知条件ではない。通知時・非検出・判定不能・停止で0へ戻る |
+| `continuous_hold_ms` | number | 最後の陽性画像で確認できた継続保持時間。最初は0、通知時は5000以上。GETや推論待ちだけでは増えない。cooldown中は達成時間を保持し、終了時・停止・非検出・判定不能で0へ戻る |
+| `required_hold_ms` | number | 通知に必要な継続保持時間。現在は5000 |
 | `cooldown_remaining_ms` | number | 通知抑制の残りミリ秒。終了済みは0 |
 | `next_capture_after_ms` | number | 次の撮影まで待つ時間。0でもpaused／endedなら撮影しない |
 | `provider` | string | `mock`または`openai`。UI／デモでモックを区別する |
@@ -120,7 +124,7 @@ X-Frame-Id: cores3-000001
 | `state` | 表示例 | 撮影 |
 | --- | --- | --- |
 | `observing` | 見守り中 | 指定の間隔で撮影 |
-| `suspected` | スマホ操作の可能性 | 指定の間隔で撮影。まだ通知しない |
+| `suspected` | スマホ保持を確認中 | 指定の間隔で撮影。まだ通知しない |
 | `cooldown` | 通知後の待機 | 指定の待ち時間は撮影を休む |
 | `unknown` | 判定できません | 指定の間隔で再試行。通知しない |
 | `paused` | 一時停止 | 撮影停止 |
@@ -136,9 +140,9 @@ X-Frame-Id: cores3-000001
 | `session_ended` | 終了操作を受けた |
 | `session_expired` | 設定時間に達した |
 | `session_changed` | 判定中に停止・終了などが起き、古い結果を破棄した |
-| `phone_use_not_detected` | 判定条件を満たすスマホ操作を検出しなかった |
-| `phone_use_suspected` | スマホ操作の候補だが連続回数が不足 |
-| `phone_use_confirmed` | 連続条件を満たして新しい通知を発行した |
+| `phone_use_not_detected` | 判定条件を満たすスマホ保持を検出しなかった |
+| `phone_use_suspected` | スマホ保持の候補だが継続時間が5秒未満 |
+| `phone_use_confirmed` | 5秒の継続保持を確認して新しい通知を発行した |
 | `insufficient_visibility` | 人・手元が十分見えず判定できない |
 | `cooldown_active` | 通知後の待機中なので判定しない |
 | `cooldown_finished` | 通知後の待機が終了した |
@@ -159,18 +163,26 @@ X-Frame-Id: cores3-000001
 
 | 設定 | 値 |
 | --- | --- |
-| 撮影間隔 | 最短3秒 |
-| スマホ操作のしきい値 | 0.8以上 |
+| 撮影間隔 | 目安1秒。5秒到達が先ならその時点の撮影を指定 |
+| スマホ保持のしきい値 | 0.8以上 |
 | 可視性のしきい値 | 0.7以上 |
-| 通知までの連続検出 | 3回 |
-| 連続判定を引き継ぐ最大間隔 | 10秒 |
+| 通知までの継続保持 | 5000ms |
+| 連続判定を引き継ぐ最大間隔 | 2500ms |
 | 通知後の待機 | 60秒 |
 | 判定タイムアウト／結果の最大経過時間 | 各10秒 |
 | 最大保持セッション | 1000 |
 | セッション当たりの受理済みフレームID | 10000 |
 | 終了後のメモリ保持 | 30分。アクセス時に清掃 |
 
-スマホが机に置いてあるだけの画像は操作として扱わず、手持ち・注視・タッチなど見えている行動で判定するよう問い合わせます。仕事目的かどうかを画像だけでは判断しないため、必要なスマホ操作には本人が一時停止を使います。
+スマホを手に持っていれば、見ていない・操作していない場合も対象です。机上に置いてあるだけの画像は対象外です。仕事目的かどうかは判定しないため、必要なスマホ利用には本人が一時停止を使います。
+
+最初の陽性画像を受理した時刻を0msとし、以降の新しい陽性画像の受理時刻との差が5000ms以上なら、その判定応答で直ちに`notify: true`を返します。受理時刻は推論待ちの前に記録し、期限・停止は判定後にも確認します。4999msでは通知せず、5000msで陽性を新たに確認した場合に通知します。GET・同じフレームIDの再送・時間経過だけでは通知しません。
+
+非検出・判定不能・providerエラー・pause・end、または受理画像の間隔が2500msを超えた場合は保持開始時刻と進捗を0に戻します。cooldown終了後も新たに5秒間の確認が必要です。`continuous_hold_ms`は確認済みの画像時刻に基づく値で、画面側で経過時間を足しません。
+
+`next_capture_after_ms`は直前の受理時刻から1秒後と5秒到達予定時刻の早い方を基準にし、推論中に経過した時間を差し引きます。クライアントは応答からさらに固定1秒待つ処理を追加しません。
+
+画像間の連続保持はサンプリングによる推定です。物理的に持った瞬間から通知まで正確に5.000秒とは保証できません。画像取得・通信・推論の遅延は実環境で計測します。とくに推論が遅く観測間隔が2500msを超える場合は継続保持が成立しません。未確認のローカルタイマーで通知を補いません。**旧「3秒間隔・3回連続」より、この5秒仕様を優先します。**
 
 ## HTTPエラー
 
@@ -215,7 +227,9 @@ X-Frame-Id: cores3-000001
 
 クライアントはカメラやOS通知を操作しません。呼び出し元が停止時の撮影停止と、通知IDの一度だけの実行を担当します。CoreS3など別実装でも、停止後の遅い結果の破棄と1回1送信を同じように守ります。
 
-`remainingMs`は開始リクエスト時からの端末側タイマーです。API応答に残り時間フィールドはありません。端末側の期限が来ると`active`がfalseになり、保存されたスナップショットが`ended`／`reason: local_session_expired`に変わります。この理由はJavaScriptクライアントが付ける値で、HTTP APIの理由ではありません。
+`remainingMs`は開始リクエスト時からの端末側タイマーです。API応答にセッションの残り時間フィールドはありません。保持進捗の`continuous_hold_ms` / `required_hold_ms`とは別の値です。端末側の期限が来ると`active`がfalseになり、保存されたスナップショットが`ended`／`reason: local_session_expired`に変わります。この理由はJavaScriptクライアントが付ける値で、HTTP APIの理由ではありません。
+
+全体の作業・進捗・結合条件は[issue #1](https://github.com/aieo-product/devdayHackathon261018/issues/1)に集約します。
 
 ## 運用上の範囲
 

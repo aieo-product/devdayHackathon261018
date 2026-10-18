@@ -26,8 +26,8 @@ export function createProvider(config, fetchImpl = fetch) {
             ],
           }],
           questions: [
-            { type: 'predicate', name: 'observable', instructions: 'The person and their hands or relevant work area are sufficiently visible to assess whether they are actively using a smartphone. False for an empty scene, covered camera, severe blur/darkness, or hands/activity outside the view.' },
-            { type: 'predicate', name: 'phone_use', instructions: 'The person is visibly holding and looking at, touching, or operating a smartphone. A smartphone merely lying on the desk is false. Reading a book, using a computer, and an ambiguous object are not sufficient evidence. Judge visible activity only; do not infer the purpose of phone use.' },
+            { type: 'predicate', name: 'observable', instructions: 'The person and their hands or relevant work area are sufficiently visible to assess whether they are holding a smartphone in a hand. False for an empty scene, covered camera, severe blur/darkness, or hands/activity outside the view.' },
+            { type: 'predicate', name: 'phone_use', instructions: 'The person is visibly holding a smartphone in a hand, even if they are not looking at or operating it. A smartphone merely lying on the desk is false. Reading a book, using a computer, and an ambiguous object are not sufficient evidence. Judge visible activity only; do not infer the purpose of phone use.' },
           ],
         }),
       });

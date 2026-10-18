@@ -44,6 +44,7 @@ export class FocusClient {
     if (this.#snapshot) this.#snapshot = {
       ...this.#snapshot, state: 'ended', notify: false, notification_id: null,
       message: null, next_capture_after_ms: 0, reason: 'local_session_expired',
+      continuous_hold_ms: 0, consecutive_count: 0,
     };
   }
 
