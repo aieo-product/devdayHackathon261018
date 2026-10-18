@@ -1,0 +1,13 @@
+include README.md pyproject.toml index.html style.css
+graft src/reachy_focus
+prune apps
+prune api
+prune clients
+prune devices
+prune docs
+prune scripts
+prune tests
+prune .github
+prune .venv
+exclude package.json
+global-exclude __pycache__ *.py[cod] .DS_Store
