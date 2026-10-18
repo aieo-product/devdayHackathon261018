@@ -1,6 +1,6 @@
 # 共通判定API仕様書（MCP Events・遠隔監視を含む）
 
-最終更新：2026-10-18（JST）。チーム共有・レビュー用。追加実装は [Issue #7](https://github.com/aieo-product/devdayHackathon261018/issues/7) / [PR #10](https://github.com/aieo-product/devdayHackathon261018/pull/10)（配備済み・未マージ）です。
+最終更新：2026-10-18（JST）。チーム共有・レビュー用。追加実装は [Issue #7](https://github.com/aieo-product/devdayHackathon261018/issues/7) / [PR #10](https://github.com/aieo-product/devdayHackathon261018/pull/10)（配備済み）です。
 
 ## 今回追加したこと
 
@@ -521,7 +521,7 @@ dotsへの依頼例：
 
 | 項目 | 2026-10-18時点 |
 | --- | --- |
-| Events Worker・端末制御REST・MCP | 実装・配備済み。PR #10でレビュー中 |
+| Events Worker・端末制御REST・MCP | 実装・配備済み。変更内容はPR #10を参照 |
 | Mac確認UIの遠隔ON/OFF・イベント中継 | 実装済み。画面を開いて表示し、端末側で許可した間だけ遠隔ON可能 |
 | 公開APIでの検証 | 仮想カメラでON→2秒検知2回→同じ通知IDの履歴保存→OFF・全track停止・ACKを確認 |
 | 自動テスト | 157件成功（既存37＋1、Events68、Mac51）。公開Worker smoke12項目成功 |
