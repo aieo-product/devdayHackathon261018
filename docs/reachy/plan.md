@@ -13,7 +13,7 @@
 - No motion checkbox. Closing the app stops idle motion too.
 - Source: src/reachy_focus; tests: tests/reachy; docs: docs/reachy.
 - Root packaging files remain in place for pushing the identical repository to HF.
-- Preserve other devices. Shared API changes are limited to zero cooldown for device_type=reachy_mini; other devices retain their existing behavior.
+- Preserve other devices and shared API source. The API owner handles server-side cooldown settings.
 
 Issue: https://github.com/aieo-product/devdayHackathon261018/issues/2
 Real recognition/motion/audio results must be recorded separately from mocks.
