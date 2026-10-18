@@ -93,3 +93,18 @@ GitHubとHF Spaceへ**同一コミット**を直接pushする。HFには全ソ�
 [API接続仕様](docs/reachy/shared-api.md) / [実機検証記録](docs/reachy/validation.md) / [直接公開手順](docs/reachy/release.md) / [Issue #2](https://github.com/aieo-product/devdayHackathon261018/issues/2)
 
 [公式アプリ仕様](https://github.com/pollen-robotics/reachy_mini/blob/main/docs/source/SDK/apps.md) / [共通API公開仕様](https://focus-shared-api-20261018.take-otani.workers.dev/docs)
+
+## DOTSフロントの起動とレビュー
+
+PCブラウザ向けの追加フロントを `focus-dopa-preview/` に用意しました。DOTS1体、動くトースト、警告音、全画面リリック、Chromeの小窓、macOS用のデスクトップ表示補助アプリを含みます。
+
+```sh
+npm run test:front
+npm run start:front
+```
+
+[音つき10シーンデモ](http://127.0.0.1:4327/?pattern=fever&character=green&showcase=1)で「音つきで一通り再生」を押すと、カメラ・実APIを使わず約33秒で確認できます。[通常画面](http://127.0.0.1:4327/?pattern=fever&character=green)で共有APIを使う場合は、[設定手順](focus-dopa-preview/README.md#共有apiを設定する)に従ってチームのトークンをローカルに設定してください。
+
+最新のIssue #1は2秒保持・通知クールダウンなしです。旧ダウンロード版API仕様には5秒／60秒の記載があるため、[引き継ぎ文書](focus-dopa-preview/docs/HANDOFF.md)と[Issue #1](https://github.com/aieo-product/devdayHackathon261018/issues/1)を参照してください。このフロントは `notify` と `next_capture_after_ms` に従い、保持時間や通知待機時間を独自に追加しません。
+
+実カメラの送信と `observing` 応答は確認済みですが、スマホの実物保持からの陽性通知は未確認です。詳細は [フロントREADME](focus-dopa-preview/README.md)、[引き継ぎとマージ手順](focus-dopa-preview/docs/HANDOFF.md)、[アセットの由来](focus-dopa-preview/ASSETS.md)に記載しています。

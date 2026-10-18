@@ -21,3 +21,4 @@ agents.local.md
 !.dev.vars.example
 .wrangler/
 .worker-build/
+.focus-overlay-bridge.json

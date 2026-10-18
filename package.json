@@ -12,7 +12,9 @@
     "start:worker": "wrangler dev -c cloudflare/wrangler.jsonc",
     "deploy:worker": "wrangler deploy -c cloudflare/wrangler.jsonc",
     "check:worker": "wrangler deploy --dry-run -c cloudflare/wrangler.jsonc",
-    "test:worker": "node --test cloudflare/test/*.test.mjs"
+    "test:worker": "node --test cloudflare/test/*.test.mjs",
+    "start:front": "npm --prefix focus-dopa-preview start",
+    "test:front": "npm --prefix focus-dopa-preview test"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
