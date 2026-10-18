@@ -1,0 +1,202 @@
+/* The toast stays in the page corner; its motion is managed by NotificationToast. */
+.focus-toast {
+  --toast-accent: #ceff34;
+  --toast-signal: var(--toast-accent);
+  --toast-duration: 8000ms;
+  position: fixed;
+  z-index: 140;
+  inset: auto 24px 24px auto;
+  width: min(432px, calc(100vw - 40px));
+  display: grid;
+  grid-template-columns: 94px minmax(0, 1fr) 28px;
+  align-items: center;
+  column-gap: 12px;
+  padding: 21px 15px 22px 15px;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--toast-signal) 65%, #49506d);
+  border-radius: 24px;
+  color: #f8f9ff;
+  background:
+    radial-gradient(ellipse at 10% 70%, color-mix(in srgb, var(--toast-accent) 17%, transparent), transparent 47%),
+    linear-gradient(125deg, #1d2038f7, #101524fc 70%);
+  box-shadow:
+    0 20px 65px #0009,
+    0 0 25px color-mix(in srgb, var(--toast-signal) 16%, transparent),
+    inset 0 1px 0 #ffffff18;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transform-origin: 88% 100%;
+}
+
+.focus-toast[data-kind="detect"] { --toast-signal: #ffbc43; }
+
+/* The same companion moves to the notice instead of appearing twice. */
+body[data-toast="visible"] #mascot { visibility: hidden; }
+
+.focus-toast::before {
+  content: "";
+  position: absolute;
+  inset: 16px auto 16px 0;
+  width: 3px;
+  border-radius: 0 4px 4px 0;
+  background: var(--toast-signal);
+  box-shadow: 0 0 15px var(--toast-signal);
+}
+
+.focus-toast .toast-character {
+  position: relative;
+  width: 94px;
+  height: 115px;
+  align-self: center;
+  transform-origin: 50% 85%;
+}
+
+.focus-toast .toast-character::before {
+  content: "";
+  position: absolute;
+  inset: 21px 4px 10px;
+  border-radius: 42% 54% 46% 51%;
+  background: color-mix(in srgb, var(--toast-accent) 21%, #101524);
+  border: 1px solid color-mix(in srgb, var(--toast-accent) 32%, transparent);
+  transform: rotate(-12deg);
+}
+
+.focus-toast .toast-character img {
+  position: relative;
+  display: block;
+  width: 112px;
+  height: 126px;
+  margin: -6px -9px 0;
+  object-fit: contain;
+  filter: drop-shadow(0 7px 7px #0006);
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.focus-toast .toast-spark {
+  position: absolute;
+  top: 6px;
+  right: 0;
+  color: var(--toast-accent);
+  font-size: 24px;
+  line-height: 1;
+  text-shadow: 0 0 14px color-mix(in srgb, var(--toast-accent) 65%, transparent);
+  transform: rotate(12deg);
+}
+
+.focus-toast .toast-copy { min-width: 0; }
+
+.focus-toast .toast-kicker {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--toast-signal);
+  font-size: 9px;
+  line-height: 1.3;
+  letter-spacing: 1.9px;
+  font-weight: 850;
+}
+
+.focus-toast .toast-copy strong {
+  display: block;
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.5;
+  letter-spacing: -.45px;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.focus-toast .toast-copy p {
+  margin: 7px 0 0;
+  color: #d9deef;
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.focus-toast .toast-source {
+  display: block;
+  margin-top: 9px;
+  color: #9faac9;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.focus-toast .toast-copy p:empty,
+.focus-toast .toast-source:empty { display: none; }
+
+.focus-toast #close-toast {
+  display: grid;
+  place-items: center;
+  align-self: start;
+  width: 28px;
+  height: 28px;
+  margin: -7px -3px 0 0;
+  padding: 0;
+  border: 1px solid #ffffff1a;
+  border-radius: 50%;
+  color: #bbc5e3;
+  background: #ffffff06;
+  font-size: 21px;
+  line-height: 1;
+}
+
+.focus-toast #close-toast:hover {
+  color: #fff;
+  border-color: #ffffff50;
+  background: #ffffff18;
+}
+
+.focus-toast #close-toast:focus-visible {
+  outline: 2px solid var(--toast-signal);
+  outline-offset: 3px;
+}
+
+.focus-toast .toast-lifetime {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--toast-signal), var(--toast-accent));
+  box-shadow: 0 -1px 12px color-mix(in srgb, var(--toast-signal) 25%, transparent);
+  transform-origin: 0 50%;
+}
+
+.focus-toast[data-motion="on"] .toast-lifetime {
+  animation: toast-lifetime var(--toast-duration) linear 1 forwards;
+}
+
+.focus-toast[data-leaving="true"] { pointer-events: none; }
+
+@keyframes toast-lifetime {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+body[data-intensity="off"] .focus-toast .toast-lifetime,
+.focus-toast[data-motion="off"] .toast-lifetime {
+  animation: none;
+}
+
+@media (max-width: 500px) {
+  .focus-toast {
+    inset: auto 16px 16px auto;
+    width: calc(100vw - 32px);
+    grid-template-columns: 76px minmax(0, 1fr) 25px;
+    column-gap: 9px;
+    padding: 18px 13px 20px 11px;
+    border-radius: 20px;
+  }
+  .focus-toast .toast-character { width: 76px; height: 105px; }
+  .focus-toast .toast-character img { width: 98px; height: 116px; margin: -5px -11px 0; }
+  .focus-toast .toast-copy strong { font-size: 17px; }
+  .focus-toast .toast-kicker { font-size: 8px; letter-spacing: 1.4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .focus-toast[data-motion] .toast-lifetime { animation: none; }
+  .focus-toast #close-toast { transition: none; }
+}

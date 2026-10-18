@@ -20,7 +20,9 @@
     "smoke:events": "node --env-file-if-exists=cloudflare/.env.connection scripts/smoke-events.mjs",
     "start:events": "wrangler dev -c cloudflare-events/wrangler.jsonc",
     "check:events": "wrangler deploy --dry-run -c cloudflare-events/wrangler.jsonc",
-    "deploy:events": "wrangler deploy -c cloudflare-events/wrangler.jsonc"
+    "deploy:events": "wrangler deploy -c cloudflare-events/wrangler.jsonc",
+    "start:front": "npm --prefix focus-dopa-preview start",
+    "test:front": "npm --prefix focus-dopa-preview test"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

@@ -103,3 +103,18 @@ npm run start:mac-check
 ```
 
 共通APIは保持2秒・通知後クールダウンなしです。新しい陽性画像から次の2秒の確認を始め、スマホを持ち続けた場合も繰り返し通知できます。各端末はサーバーの `required_hold_ms` と `next_capture_after_ms` に従い、独自のタイマーで通知を生成しません。詳細は [API仕様書](cloudflare/API仕様書.md) を参照してください。
+
+## DOTSフロントの起動とレビュー
+
+PCブラウザ向けの追加フロントを `focus-dopa-preview/` に用意しました。DOTS1体、動くトースト、警告音、全画面リリック、Chromeの小窓、macOS用のデスクトップ表示補助アプリを含みます。
+
+```sh
+npm run test:front
+npm run start:front
+```
+
+[音つき10シーンデモ](http://127.0.0.1:4327/?pattern=fever&character=green&showcase=1)で「音つきで一通り再生」を押すと、カメラ・実APIを使わず約33秒で確認できます。[通常画面](http://127.0.0.1:4327/?pattern=fever&character=green)で共有APIを使う場合は、[設定手順](focus-dopa-preview/README.md#共有apiを設定する)に従ってチームのトークンをローカルに設定してください。
+
+現行の共通APIは2秒保持・通知クールダウンなしです。[API仕様書](cloudflare/API仕様書.md)と[引き継ぎ文書](focus-dopa-preview/docs/HANDOFF.md)を参照してください。このフロントは `notify` と `next_capture_after_ms` に従い、保持時間や通知待機時間を独自に追加しません。
+
+実カメラの送信と `observing` 応答は確認済みですが、スマホの実物保持からの陽性通知は未確認です。詳細は [フロントREADME](focus-dopa-preview/README.md)、[引き継ぎとマージ手順](focus-dopa-preview/docs/HANDOFF.md)、[アセットの由来](focus-dopa-preview/ASSETS.md)に記載しています。
