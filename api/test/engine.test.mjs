@@ -3,17 +3,38 @@ import assert from 'node:assert/strict';
 import { FocusEngine } from '../src/engine.mjs';
 import { DecisionError } from '../src/errors.mjs';
 
-function harness({ decide, settings } = {}) {
+function harness({ decide, settings, deviceType = 'mac' } = {}) {
   let now = 0;
   let calls = 0;
   let result = { phoneProbability: 0.9, observableProbability: 1 };
   const provider = { name: 'mock', configured: true, async decide(args) { calls += 1; return decide ? decide(args) : result; } };
   const engine = new FocusEngine({ provider, clock: () => now, settings });
   const owner = 'owner';
-  const session = engine.create({ owner, deviceType: 'mac' });
+  const session = engine.create({ owner, deviceType });
   const frame = (frameId, sessionId = session.session_id) => engine.frame({ owner, sessionId, frameId, bytes: Buffer.from([255, 216, 255]), contentType: 'image/jpeg' });
   return { engine, owner, session, frame, advance(ms = 1000) { now += ms; }, result(value) { result = value; }, get calls() { return calls; } };
 }
+
+test('Reachy repeats after fresh five-second holds without cooldown', async () => {
+  const h = harness({ deviceType: 'reachy_mini' });
+  const notifications = [];
+  for (let cycle = 0; cycle < 2; cycle += 1) {
+    for (let second = 0; second <= 5; second += 1) {
+      const result = await h.frame(`cycle-${cycle}-${second}`);
+      assert.equal(result.notify, second === 5);
+      assert.equal(result.cooldown_remaining_ms, 0);
+      assert.ok(result.next_capture_after_ms <= 1000);
+      if (result.notify) {
+        notifications.push(result.notification_id);
+        assert.equal(result.state, 'observing');
+        assert.equal(result.continuous_hold_ms, 5000);
+        assert.equal((await h.frame(`cycle-${cycle}-${second}`)).notify, false);
+      }
+      h.advance();
+    }
+  }
+  assert.equal(new Set(notifications).size, 2);
+});
 
 test('five seconds of positive samples notify once; cooldown requires a fresh five-second hold', async () => {
   const h = harness();

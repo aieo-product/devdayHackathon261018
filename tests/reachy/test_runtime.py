@@ -2,10 +2,10 @@ import threading
 from concurrent.futures import Future
 
 import pytest
-from test_session import Clock
+from support import Clock, snapshot
 
+from reachy_focus.api import ApiError
 from reachy_focus.config import Settings, SettingsStore
-from reachy_focus.decisions import DecisionError, Observation
 from reachy_focus.runtime import Runtime
 
 
@@ -24,6 +24,9 @@ class Hardware:
         self.notifications += 1
         return [{"action": "reminder", "status": "started"}]
 
+    def celebrate(self, settings):
+        return [{"action": "cheerful1", "status": "started"}]
+
     def cancel(self):
         self.cancels += 1
 
@@ -31,37 +34,73 @@ class Hardware:
         pass
 
 
-class Evaluator:
-    def evaluate(self, image, settings):
-        return Observation(True, 1, "evaluated")
+class Api:
+    def __init__(self):
+        self.controls = []
+        self.counter = 0
+        self.frames = []
+
+    def start(self, settings):
+        self.counter += 1
+        return snapshot("session-" + str(self.counter), next_capture_after_ms=0)
+
+    def control(self, settings, sid, action):
+        self.controls.append((sid, action))
+        return snapshot(
+            sid,
+            state={"pause": "paused", "resume": "observing", "end": "ended"}[action],
+        )
+
+    def frame(self, settings, sid, frame_id, jpeg):
+        self.frames.append(frame_id)
+        return snapshot(sid)
 
 
 @pytest.fixture
 def runtime(tmp_path):
     store = SettingsStore(tmp_path / "settings.json")
-    store.save(Settings(api_key="test-secret"))
-    r = Runtime(Hardware(), Evaluator(), store, Clock())
+    store.save(Settings(api_token="test-secret"))
+    r = Runtime(Hardware(), Api(), store, Clock())
     yield r
     r.close()
 
 
-def test_controls_require_consent_and_key(runtime):
+def test_controls_require_consent_and_token(runtime):
     with pytest.raises(ValueError):
         runtime.control("start")
-    runtime.configure({"api_key": ""})
+    runtime.configure({"api_token": ""})
     with pytest.raises(ValueError):
         runtime.control("start", consent=True)
+
+
+def test_phone_release_executes_happy_once(runtime):
+    r = runtime
+    r.control("start", consent=True)
+    for phone in (1, 0, 0):
+        f = Future()
+        f.set_result(
+            snapshot(
+                phone_probability=phone,
+                observable_probability=1,
+                reason="phone_use_suspected" if phone else "phone_use_not_detected",
+            )
+        )
+        r.pending, r.pending_generation = f, r.session.generation
+        r.step()
+    events = [e for e in r.session.events if e["event"] == "phone_put_down"]
+    assert len(events) == 1
+    assert events[0]["actions"] == [{"action": "cheerful1", "status": "started"}]
 
 
 @pytest.mark.parametrize(
     "change", ["pause", "end", "settings", "new_session", "deadline"]
 )
-def test_stale_inference_never_notifies(runtime, change):
+def test_old_frame_never_notifies(runtime, change):
     r = runtime
     r.control("start", consent=True)
-    r.session.streak = 2
-    future = Future()
-    r.pending, r.pending_generation = future, r.session.generation
+    sid = r.session.session_id
+    f = Future()
+    r.pending, r.pending_generation = f, r.session.generation
     if change == "settings":
         r.configure({"motion_enabled": True})
     elif change == "new_session":
@@ -71,106 +110,119 @@ def test_stale_inference_never_notifies(runtime, change):
         r.session.clock.now += 1500
     else:
         r.control(change)
-    future.set_result(Observation(True, 1, "evaluated"))
+    f.set_result(snapshot(sid, notify=True, notification_id="notice-1"))
     r.step()
     assert r.hardware.notifications == 0
-    if change in ("pause", "end", "deadline"):
-        assert r.hardware.captures == 0
 
 
-def test_single_inflight_request_and_responsive_stop(runtime):
+def test_server_delay_is_used_without_extra_local_interval(runtime):
+    r = runtime
+    r.control("start", consent=True)
+    f = Future()
+    f.set_result(snapshot(next_capture_after_ms=250))
+    r.pending, r.pending_generation = f, r.session.generation
+    r.step()
+    assert r.next_capture == r.session.clock() + 0.25
+    assert r.hardware.captures == 0
+
+
+def test_only_one_inflight_and_stop_stays_responsive(runtime):
     r = runtime
     entered, release = threading.Event(), threading.Event()
 
-    class Blocking:
-        def evaluate(self, image, settings):
-            entered.set()
-            assert release.wait(2)
-            return Observation(True, 1, "evaluated")
+    def frame(settings, sid, fid, jpeg):
+        entered.set()
+        assert release.wait(3)
+        return snapshot(sid, notify=True, notification_id="late")
 
-    r.evaluator = Blocking()
+    r.api.frame = frame
     r.control("start", consent=True)
     r.step()
     assert entered.wait(2)
     for _ in range(10):
-        r.session.clock.now += 3
+        r.session.clock.now += 1
         r.step()
     assert r.hardware.captures == 1
     r.control("pause")
     release.set()
     r.pending.result(timeout=2)
     r.step()
-    assert r.hardware.notifications == 0
-    assert r.hardware.captures == 1
+    assert r.hardware.notifications == 0 and r.hardware.captures == 1
 
 
-def test_configuration_is_owner_only_and_never_echoes_key(runtime):
+def test_failed_pause_still_stops_capture(runtime):
     r = runtime
-    r.configure({"motion_enabled": True})
-    assert r.store.load().api_key == "test-secret"
-    assert r.store.path.stat().st_mode & 0o777 == 0o600
-    assert "test-secret" not in str(r.snapshot())
-    assert "test-secret" not in repr(r.session.settings)
+    r.control("start", consent=True)
+
+    def fail(*args):
+        raise ApiError("connection")
+
+    r.api.control = fail
+    with pytest.raises(ValueError):
+        r.control("pause")
+    r.step()
+    assert r.session.state == "paused" and r.hardware.captures == 0
 
 
-def test_preview_does_not_evaluate_and_active_preview_rejected(runtime):
+def test_end_during_slow_start_closes_remote_session(runtime):
+    r = runtime
+    entered, release = threading.Event(), threading.Event()
+
+    def slow(settings):
+        entered.set()
+        assert release.wait(3)
+        return snapshot()
+
+    r.api.start = slow
+    thread = threading.Thread(target=lambda: r.control("start", consent=True))
+    thread.start()
+    assert entered.wait(2)
+    # No session id exists yet; stop locally without waiting for the pending start.
+    # control/end can wait for serialized commands, so execute it on another thread.
+    ended = threading.Event()
+    locally_stopped = threading.Event()
+    original_cancel = r.hardware.cancel
+
+    def cancelled():
+        original_cancel()
+        locally_stopped.set()
+
+    r.hardware.cancel = cancelled
+
+    def end():
+        r.control("end")
+        ended.set()
+
+    t = threading.Thread(target=end)
+    t.start()
+    assert locally_stopped.wait(2)
+    with r.lock:
+        assert r.session.state == "ended"
+    release.set()
+    thread.join(3)
+    t.join(3)
+    r.cleanup_pool.submit(lambda: None).result(timeout=3)
+    assert ended.is_set() and ("session-1", "end") in r.api.controls
+    assert r.hardware.captures == 0
+
+
+def test_settings_owner_only_no_token_echo_and_preview_local(runtime):
     assert runtime.preview() == b"jpeg"
-    assert runtime.hardware.captures == 1
+    runtime.configure({"motion_enabled": True})
+    assert runtime.store.path.stat().st_mode & 0o777 == 0o600
+    assert "test-secret" not in str(runtime.snapshot())
+    assert "test-secret" not in repr(runtime.session.settings)
     runtime.control("start", consent=True)
     with pytest.raises(ValueError):
         runtime.preview()
 
 
-def test_key_removal_pauses(runtime):
-    runtime.control("start", consent=True)
-    runtime.configure({"api_key": ""})
-    assert runtime.session.state == "paused"
-    with pytest.raises(ValueError):
-        runtime.control("resume")
-
-
-def test_notification_runs_once_after_three_results(runtime):
+def test_queued_capture_cancelled_and_local_timer_runs_without_frames(runtime):
     r = runtime
     r.control("start", consent=True)
-    for _ in range(3):
-        future = Future()
-        future.set_result(Observation(True, 0.95, "evaluated"))
-        r.pending, r.pending_generation = future, r.session.generation
-        r.step()
-        r.session.clock.now += 3
-    assert r.hardware.notifications == 1
-    for _ in range(5):
-        r.step()
-    assert r.hardware.notifications == 1
-
-
-def test_worker_failure_resets_streak_without_notification(runtime):
-    r = runtime
-    r.control("start", consent=True)
-    r.session.streak = 2
-    future = Future()
-    future.set_exception(DecisionError("timeout"))
-    r.pending, r.pending_generation = future, r.session.generation
-    r.step()
-    assert r.session.streak == 0
-    assert r.session.last_observation["reason"] == "timeout"
-    assert r.hardware.notifications == 0
-
-
-def test_timer_expires_without_a_completed_observation(runtime):
-    r = runtime
-    r.control("start", consent=True)
-    r.pending, r.pending_generation = Future(), r.session.generation
+    g = r.session.generation
     r.session.clock.now += 1500
     r.step()
     assert r.session.state == "completed"
+    assert r._observe(g, r.session.settings, "session-1") is None
     assert r.hardware.captures == r.hardware.notifications == 0
-
-
-def test_queued_worker_cannot_capture_after_stop(runtime):
-    r = runtime
-    r.control("start", consent=True)
-    generation, settings = r.session.generation, r.session.settings
-    r.control("end")
-    assert r._observe(generation, settings) is None
-    assert r.hardware.captures == 0

@@ -1,22 +1,24 @@
-# Reachy Focus implementation plan
+# Reachy Focus — current implementation scope
 
-Approved by the user on 2026-10-18.
+2026-10-18の追加指示で、直接Decisions接続から共通API接続へ変更した。
+以前の3回連続モードは廃止。判定・5秒保持・クールダウンは共通APIだけが管理する。
 
-- Run a Python app on Reachy Mini Wireless; the browser is only a controller.
-- Keep the shared repository as the HF Space root. Package only `src/reachy_focus`.
-- Call Decisions directly using an owner-supplied key stored outside the checkout.
-- Use a 25 minute timer, 3 second sampling, three observable >=0.8 results,
-  60 second cooldown and a 10 second valid-observation gap limit.
-- Pause/end/settings changes invalidate in-flight observations and pending actions.
-- Ship a LAN UI, bundled Japanese reminder, optional gentle motion, session-only logs.
-- Test with injected camera/clock/decision/action adapters and validate the built package.
-- Preserve existing API, clients and CoreS3 code. Their five-second shared-API policy
-  is independent of this explicitly approved standalone Reachy policy.
+- Shared API: https://focus-shared-api-20261018.take-otani.workers.dev
+- Credentials: user-supplied FOCUS_API_TOKEN on the robot only; never commit it.
+- On-robot Python app, no persistent Mac/browser required.
+- Runtime: one frame in flight, consume next_capture_after_ms and fresh notify IDs.
+- Local stop/deadline precedes network control; stale replies never execute actions.
+- Raise the head smoothly at startup; always-on small idle motions while the app runs.
+- Play the official 😨 fear1 preset on a new server notification; suppress idle while playing it.
+- No motion checkbox. Closing the app stops idle motion too.
+- Source: src/reachy_focus; tests: tests/reachy; docs: docs/reachy.
+- Root packaging files remain in place for pushing the identical repository to HF.
+- Preserve other devices. Shared API changes are limited to zero cooldown for device_type=reachy_mini; other devices retain their existing behavior.
 
-No unanswered product questions. Real hardware and API checks require a reachable
-robot and an owner-configured key; do not claim these checks based on mocks.
-
-Final organization: `src/reachy_focus/`, `tests/reachy/`, `docs/reachy/`.
-Root README, pyproject, landing page and style are the distribution contract.
-The remote default branch is `feat/shared-focus-api`; preserve its latest CoreS3 changes.
 Issue: https://github.com/aieo-product/devdayHackathon261018/issues/2
+Real recognition/motion/audio results must be recorded separately from mocks.
+
+- Smartphone put-down triggers cheerful1 once from a fresh, visible negative result.
+- Preserve preset sound and then play the bundled Japanese reminder.
+- Gradually increase idle rhythm over 120 seconds of visible non-holding results.
+- Keep the camera reference pose fixed through interrupted emotions; return smoothly on cancellation.

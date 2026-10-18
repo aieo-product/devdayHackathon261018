@@ -4,7 +4,7 @@ import threading
 
 from reachy_mini import ReachyMini, ReachyMiniApp
 
-from .decisions import DecisionsEvaluator
+from .api import FocusApi
 from .hardware import ReachyHardware
 from .runtime import Runtime
 from .web import attach_routes
@@ -20,7 +20,11 @@ class ReachyFocus(ReachyMiniApp):
             attach_routes(self.settings_app, lambda: self.runtime)
 
     def run(self, reachy_mini: ReachyMini, stop_event: threading.Event):
-        self.runtime = Runtime(ReachyHardware(reachy_mini), DecisionsEvaluator())
+        hardware = ReachyHardware(reachy_mini)
+        hardware.prepare_camera()
+        if stop_event.is_set():
+            return
+        self.runtime = Runtime(hardware, FocusApi())
         self.runtime.run(stop_event)
 
 

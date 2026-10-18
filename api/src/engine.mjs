@@ -225,12 +225,19 @@ export class FocusEngine {
         session.holdStartedAt ??= now;
         session.continuousHoldMs = now - session.holdStartedAt;
         if (session.continuousHoldMs >= this.settings.requiredHoldMs) {
-          session.state = 'cooldown';
-          session.cooldownUntil = this.clock() + this.settings.cooldownMs;
+          const confirmedHoldMs = session.continuousHoldMs;
+          const cooldownMs = session.deviceType === 'reachy_mini' ? 0 : this.settings.cooldownMs;
+          session.state = cooldownMs > 0 ? 'cooldown' : 'observing';
+          session.cooldownUntil = cooldownMs > 0 ? this.clock() + cooldownMs : 0;
+          if (cooldownMs === 0) {
+            this.resetHold(session);
+            session.lastSampleAt = null;
+          }
           session.count = 0;
           session.reason = 'phone_use_confirmed';
           return this.snapshot(session, {
             notify: true, notification_id: randomUUID(), message: 'スマホを置いて、作業に戻りませんか？',
+            continuous_hold_ms: confirmedHoldMs,
           });
         }
         session.state = 'suspected';

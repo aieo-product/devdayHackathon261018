@@ -5,8 +5,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reachy_focus"
-version = "0.1.0"
-description = "Standalone smartphone-use reminders for Reachy Mini Wireless"
+version = "0.2.8"
+description = "Shared-API smartphone-use reminders for Reachy Mini Wireless"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

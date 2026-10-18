@@ -1,148 +1,163 @@
-"""Deterministic on-robot session state, independent of SDK and transport."""
+"""Local safety/timer state; all phone-holding policy belongs to the server."""
 
 import time
 import uuid
 from collections import deque
 
-from .config import Settings
-from .decisions import Observation
-
 
 class Session:
-    def __init__(self, settings: Settings, clock=time.monotonic):
+    def __init__(self, settings, clock=time.monotonic):
         self.settings = settings
         self.clock = clock
         self.state = "idle"
         self.generation = 0
         self.session_id = None
         self.deadline = 0.0
-        self.streak = 0
-        self.last_valid = None
-        self.cooldown_until = 0.0
-        self.last_observation = None
+        self.remote = None
+        self.error = None
         self.notification_count = 0
         self.events = deque(maxlen=500)
+        self.seen = set()
+        self.phone_in_use = False
+        self.phone_put_down = False
+        self.focus_seconds = 0.0
+        self.last_focus_sample = None
 
-    def log(self, event: str, **values) -> None:
+    def reset_focus(self):
+        self.focus_seconds = 0.0
+        self.last_focus_sample = None
+
+    def log(self, event, **values):
         self.events.append(
             {
                 "id": str(uuid.uuid4()),
                 "time": time.time(),
-                "device": "reachy",
+                "device": "reachy_mini",
                 "event": event,
                 **values,
             }
         )
 
-    def reset_detection(self) -> None:
-        self.streak = 0
-        self.last_valid = None
-
-    def invalidate(self) -> None:
+    def invalidate(self):
         self.generation += 1
-        self.reset_detection()
-        self.last_observation = None
+        self.reset_focus()
+        self.phone_in_use = False
+        self.phone_put_down = False
+        if self.remote:
+            self.remote = self.remote | {
+                "notify": False,
+                "notification_id": None,
+                "continuous_hold_ms": 0,
+                "consecutive_count": 0,
+            }
 
-    def start(self) -> None:
-        if self.state in ("running", "paused"):
+    def begin(self):
+        if self.state in ("starting", "running", "paused", "resuming"):
             raise ValueError("進行中のセッションを終了してください。")
         self.invalidate()
-        self.session_id = str(uuid.uuid4())
-        self.events.clear()
-        self.notification_count = 0
-        self.cooldown_until = 0
+        self.state = "starting"
+        self.session_id = None
+        self.remote = None
+        self.error = None
         self.deadline = self.clock() + self.settings.duration_minutes * 60
-        self.state = "running"
-        self.log("session_started")
+        self.notification_count = 0
+        self.events.clear()
+        self.seen.clear()
+        return self.generation
 
-    def pause(self) -> None:
-        self.tick()
-        if self.state != "running":
-            raise ValueError("集中中のみ一時停止できます。")
+    def stop_local(self, state, event):
         self.invalidate()
-        self.state = "paused"
-        self.log("session_paused")
+        self.state = state
+        self.log(event)
 
-    def resume(self) -> None:
-        self.tick()
-        if self.state != "paused":
-            raise ValueError("一時停止中のみ再開できます。")
-        self.invalidate()
-        self.state = "running"
-        self.log("session_resumed")
-
-    def end(self, completed=False) -> None:
-        active = self.state in ("running", "paused")
-        self.invalidate()
-        self.state = "completed" if completed else "ended"
-        if active:
-            self.log("session_completed" if completed else "session_ended")
-
-    def tick(self) -> bool:
-        if self.state in ("running", "paused") and self.clock() >= self.deadline:
-            self.end(completed=True)
+    def tick(self):
+        if (
+            self.last_focus_sample is not None
+            and self.clock() - self.last_focus_sample >= 10
+        ):
+            self.reset_focus()
+        if (
+            self.state in ("starting", "running", "paused", "resuming")
+            and self.clock() >= self.deadline
+        ):
+            self.stop_local("completed", "session_completed")
             return True
         return False
 
-    def fail(self, reason: str) -> None:
-        self.reset_detection()
-        self.last_observation = {
-            "observable": False,
-            "phone_probability": None,
-            "reason": reason,
-        }
-
-    def accept(self, generation: int, observation: Observation) -> str | None:
+    def apply(self, snapshot, generation, from_frame=False):
+        self.phone_put_down = False
         self.tick()
-        if generation != self.generation or self.state != "running":
+        if generation != self.generation:
             return None
-        now = self.clock()
-        self.last_observation = {
-            "observable": observation.observable,
-            "phone_probability": observation.phone_probability,
-            "reason": observation.reason,
-        }
-        if now < self.cooldown_until:
-            self.reset_detection()
+        if from_frame and self.state != "running":
             return None
-        if self.cooldown_until:
-            self.cooldown_until = 0
-            self.reset_detection()
-        if (
-            not observation.observable
-            or observation.phone_probability is None
-            or observation.phone_probability < self.settings.threshold
-        ):
-            self.reset_detection()
+        self.error = None
+        self.remote = snapshot | {"notify": False, "notification_id": None}
+        if snapshot["state"] == "ended":
+            self.stop_local(
+                "completed" if snapshot["reason"] == "session_expired" else "ended",
+                "session_completed"
+                if snapshot["reason"] == "session_expired"
+                else "session_ended",
+            )
             return None
-        if (
-            self.last_valid is not None
-            and now - self.last_valid >= self.settings.max_gap_seconds
-        ):
-            self.reset_detection()
-        self.last_valid = now
-        self.streak += 1
-        if self.streak < self.settings.consecutive_required:
+        if snapshot["state"] == "paused":
+            self.state = "paused"
             return None
-        self.reset_detection()
-        self.cooldown_until = now + self.settings.cooldown_seconds
-        event_id = str(uuid.uuid4())
-        self.notification_count += 1
-        self.log("phone_detected", notification_id=event_id)
-        return event_id
+        if from_frame:
+            observable = snapshot["observable_probability"]
+            phone = snapshot["phone_probability"]
+            if (
+                snapshot["reason"] == "phone_use_not_detected"
+                and observable is not None
+                and observable >= 0.7
+                and phone is not None
+                and phone <= 0.2
+            ):
+                now = self.clock()
+                if self.last_focus_sample is not None:
+                    self.focus_seconds += now - self.last_focus_sample
+                self.last_focus_sample = now
+            else:
+                self.reset_focus()
+            if observable is not None and observable >= 0.7 and phone is not None:
+                if phone >= 0.8:
+                    self.phone_in_use = True
+                elif phone <= 0.2 and snapshot["reason"] == "phone_use_not_detected":
+                    self.phone_put_down = self.phone_in_use
+                    self.phone_in_use = False
+        nid = snapshot.get("notification_id")
+        if from_frame and snapshot["notify"] and nid and nid not in self.seen:
+            self.seen.add(nid)
+            self.notification_count += 1
+            self.log("phone_detected", notification_id=nid)
+            return nid
+        return None
 
-    def snapshot(self) -> dict:
-        self.tick()
-        now = self.clock()
+    def fail(self, reason):
+        self.reset_focus()
+        self.error = reason
+        if self.remote:
+            self.remote = self.remote | {
+                "notify": False,
+                "notification_id": None,
+                "state": "unknown",
+                "reason": reason,
+                "continuous_hold_ms": 0,
+                "consecutive_count": 0,
+            }
+        self.log("api_failed", reason=reason)
+
+    def snapshot(self):
         return {
             "state": self.state,
             "session_id": self.session_id,
-            "remaining_seconds": max(0, self.deadline - now)
-            if self.state in ("running", "paused")
+            "remaining_seconds": max(0, self.deadline - self.clock())
+            if self.state in ("starting", "running", "paused", "resuming")
             else 0,
-            "consecutive": self.streak,
-            "cooldown_seconds": max(0, self.cooldown_until - now),
             "notification_count": self.notification_count,
-            "observation": self.last_observation,
+            "focus_seconds": self.focus_seconds,
+            "server": self.remote,
+            "error": self.error,
             "events": list(self.events),
         }

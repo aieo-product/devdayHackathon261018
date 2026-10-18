@@ -31,7 +31,7 @@ def test_lan_control_contract(runtime):
         )
         assert (
             client.post(
-                "/api/settings", headers=headers, json={"api_key": "another-secret"}
+                "/api/settings", headers=headers, json={"api_token": "another-secret"}
             ).status_code
             == 200
         )
