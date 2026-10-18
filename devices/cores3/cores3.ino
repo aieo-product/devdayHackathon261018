@@ -76,6 +76,7 @@ QueueHandle_t uiQueue = nullptr;
 SemaphoreHandle_t hardwareLock = nullptr;
 bool configured = false;
 bool workerReady = false;
+volatile uint8_t lastWifiDisconnectReason = 0;
 
 Command readCommand() {
   portENTER_CRITICAL(&commandLock);
@@ -149,11 +150,32 @@ bool ensureNetwork(const Command& command) {
   if (WiFi.status() != WL_CONNECTED) {
     publish(command, "CONNECTING", "Connecting Wi-Fi");
     WiFi.mode(WIFI_STA);
+    WiFi.disconnect(false, false); // Cancel a previous pending association, without erasing settings.
+    lastWifiDisconnectReason = 0;
+    int networks = WiFi.scanNetworks(false, true, false, 120);
+    int match = -1;
+    for (int i = 0; i < networks; ++i) {
+      if (WiFi.SSID(i) == FocusConfig::WIFI_SSID &&
+          (match < 0 || WiFi.RSSI(i) > WiFi.RSSI(match))) match = i;
+    }
+    Serial.printf("[focus] wifi target_visible=%d scan_ok=%d", match >= 0, networks >= 0);
+    if (match >= 0)
+      Serial.printf(" channel=%ld auth=%d rssi=%ld", static_cast<long>(WiFi.channel(match)),
+                    static_cast<int>(WiFi.encryptionType(match)), static_cast<long>(WiFi.RSSI(match)));
+    Serial.println();
+    WiFi.scanDelete();
+    if (!isCurrent(command)) return false;
     WiFi.begin(FocusConfig::WIFI_SSID, FocusConfig::WIFI_PASSWORD);
     uint32_t started = millis();
     while (WiFi.status() != WL_CONNECTED) {
-      if (!isCurrent(command)) return false;
+      if (!isCurrent(command)) {
+        WiFi.disconnect(false, false);
+        return false;
+      }
       if (millis() - started >= WIFI_TIMEOUT_MS) {
+        Serial.printf("[focus] wifi timeout status=%d last_reason=%u\n",
+                      static_cast<int>(WiFi.status()), lastWifiDisconnectReason);
+        WiFi.disconnect(false, false);
         publish(command, "UNKNOWN", "Wi-Fi timeout; press START");
         return false;
       }
@@ -398,6 +420,11 @@ void worker(void*) {
       runReady = false;
       String error;
       Snapshot snapshot;
+      if (command.intent != Intent::Run && (sessionId.isEmpty() || serverEnded)) {
+        publish(command, command.intent == Intent::Pause ? "PAUSED" : "ENDED",
+                "No active server session");
+        continue;
+      }
       if (!ensureNetwork(command)) continue;
       bool ok = true;
       if (command.intent == Intent::Run) {
@@ -521,6 +548,10 @@ void setup() {
   uiQueue = xQueueCreate(1, sizeof(UiEvent));
   hardwareLock = xSemaphoreCreateMutex();
   configured = configurationValid();
+  WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t info) {
+    lastWifiDisconnectReason = info.wifi_sta_disconnected.reason;
+    Serial.printf("[focus] wifi disconnected reason=%u\n", lastWifiDisconnectReason);
+  }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
   Serial.printf("[focus] boot configured=%d camera=idle; commands: START STOP END\n", configured);
   if (!uiQueue || !hardwareLock) {
     drawStatus("UNKNOWN", "Cannot allocate worker resources");
