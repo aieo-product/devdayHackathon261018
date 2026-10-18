@@ -1,0 +1,11 @@
+{
+  "name": "focus-hackathon",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.9" },
+  "scripts": {
+    "start:api": "node --env-file-if-exists=api/.env api/src/index.mjs",
+    "test": "node --test api/test/*.test.mjs clients/*.test.mjs",
+    "smoke": "node --env-file-if-exists=api/.env scripts/smoke-test.mjs"
+  }
+}
