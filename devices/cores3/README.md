@@ -48,11 +48,11 @@ OpenAI API キーはバックエンドだけに置きます。本体の `FOCUS_A
 | 再開 | 同上、`{"action":"resume"}` | HTTP 200、snapshot |
 | 終了 | 同上、`{"action":"end"}` | HTTP 200、snapshot |
 
-応答は `session_id`、`state`、`notify`、`notification_id`、`continuous_hold_ms`、`required_hold_ms`、`next_capture_after_ms`、`provider` 等を持つ **トップレベルの snapshot JSON** です。`snapshot` オブジェクトで包みません。保有時間の 2 フィールドは符号なし整数で、`required_hold_ms` は `5000` です。本体は型と必須値を検証します。固定 Content-Length / chunked のどちらにも対応し、応答は 4 KiB まで受け付けます。
+応答は `session_id`、`state`、`notify`、`notification_id`、`continuous_hold_ms`、`required_hold_ms`、`next_capture_after_ms`、`provider` 等を持つ **トップレベルの snapshot JSON** です。`snapshot` オブジェクトで包みません。保有時間の 2 フィールドは符号なし整数で、`required_hold_ms` は `2000` です。本体は型と必須値を検証します。固定 Content-Length / chunked のどちらにも対応し、応答は 4 KiB まで受け付けます。
 
 判定対象は「スマホを手に持っている」状態です。操作や注視を伴わなくても対象となり、机に置かれたスマホは対象外です。API は 1 秒のサンプル間隔を指定し、最初の陽性を `0 ms` として、連続保有が 5 秒以上となる新しい陽性応答で直ちに `notify: true` を返します。確率閾値・連続保有時間・60 秒のクールダウンはサーバーが管理します。陰性・不明・判定エラー・一時停止・終了、または観測間隔が 2500 ms を超えた場合、連続保有時間はリセットされます。
 
-本体は成功応答の `next_capture_after_ms` だけ待って次の画像を送ります。`continuous_hold_ms` と `required_hold_ms` を `Hold 1.0 / 5.0 s (API)` のように表示し、本体側の時計で進捗を増やしたり、5 秒到達を判定したりしません。通信失敗時の再試行待ちだけ 3 秒を置きます。フレーム ID はセッション内の連番で、新しい画像ごとに増えます。
+本体は成功応答の `next_capture_after_ms` だけ待って次の画像を送ります。`continuous_hold_ms` と `required_hold_ms` を `Hold 1.0 / 2.0 s (API)` のように表示し、本体側の時計で進捗を増やしたり、2 秒到達を判定したりしません。通信失敗時の再試行待ちだけ 3 秒を置きます。フレーム ID はセッション内の連番で、新しい画像ごとに増えます。
 
 実際に手に取った瞬間から正確に 5 秒での通知は保証できません。画像取得・通信・推論の遅延が加わります。推論等が遅く、API の観測間隔が 2500 ms を超えると進捗はリセットされるため、その環境ではスマホを持ち続けても通知まで進まない場合があります。実機デモ前に API 側の観測間隔を確認してください。
 
@@ -91,7 +91,7 @@ OpenAI API キーはバックエンドだけに置きます。本体の `FOCUS_A
 
 プログラム領域は **1,305,027 bytes / 3,145,728 bytes（41%）**、静的RAMは **68,520 bytes / 327,680 bytes（20%）**。画像取得やHTTP処理中のヒープ・PSRAM使用量は、この静的集計には含みません。USBのESP32-S3を識別して `/dev/cu.usbmodem101` へ書き込み成功（exit 0、書き込み内容のhash検証成功）。初回の未設定状態では `boot configured=0 camera=idle` と `CONFIG REQUIRED`、設定後の再ビルド・書き込みでは `boot configured=1 camera=idle` と `PAUSED` を確認しました。開始操作なしでは撮影/フレーム送信ログが出ません。明示的な `START` でWi-Fi接続を試し、`target_visible=0 scan_ok=1` と切断理由 `201`（Espressifの `WIFI_REASON_NO_AP_FOUND`）を確認しました。設定先が見えないためチャンネル・認証方式・RSSIは取得できていません。SSID/password文字列の前後空白・不可視の書式制御文字はありませんでした。
 
-`STOP` → `END` の後は `ENDED / No active server session` を確認し、再接続・撮影・送信は始まりません。接続待ちの取消時に古いassociationを切断し、サーバーセッションがないSTOP/ENDでは新たなWi-Fi接続を始めないよう修正しています。カメラ・実機からのAPI接続・5秒進捗・ビープは未確認です。ログは画面描画や音の要求を表すもので、物理画面の目視・音の聴取は別途必要です。
+`STOP` → `END` の後は `ENDED / No active server session` を確認し、再接続・撮影・送信は始まりません。接続待ちの取消時に古いassociationを切断し、サーバーセッションがないSTOP/ENDでは新たなWi-Fi接続を始めないよう修正しています。カメラ・実機からのAPI接続・保持時間の進捗・ビープは未確認です。ログは画面描画や音の要求を表すもので、物理画面の目視・音の聴取は別途必要です。
 
 ESP32-S3のWi-Fiは [Espressif公式仕様](https://www.espressif.com/products/socs/esp32-s3) の2.4GHz（802.11 b/g/n）です。今回の記録から設定先が5GHz専用と断定はできません。2.4GHz側の正しいSSID・電波が端末から見えることを確認してから再試験してください。
 

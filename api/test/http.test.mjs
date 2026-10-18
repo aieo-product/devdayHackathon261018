@@ -67,7 +67,7 @@ async function fixture(t) {
     assert.equal(typeof body.session_id, 'string');
     assert.ok(body.session_id.length > 0);
     assert.equal(body.continuous_hold_ms, 0);
-    assert.equal(body.required_hold_ms, 5000);
+    assert.equal(body.required_hold_ms, 2000);
     return body.session_id;
   };
   const frame = (id, frameId, body = PNG, contentType = 'image/png') => authenticated(
@@ -242,7 +242,7 @@ test('a real HTTP session accepts frames and suppresses inference while paused o
     const snapshot = await lateFrame.json();
     assert.equal(snapshot.notify, false);
     assert.equal(snapshot.continuous_hold_ms, 0);
-    assert.equal(snapshot.required_hold_ms, 5000);
+    assert.equal(snapshot.required_hold_ms, 2000);
     assert.equal(snapshot.reason, action === 'pause' ? 'session_paused' : 'session_ended');
     assert.equal(api.calls.length, 1, `${action} must prevent provider calls`);
   }

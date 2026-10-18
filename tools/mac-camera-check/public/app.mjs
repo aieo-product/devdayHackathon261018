@@ -36,7 +36,7 @@ function stopCamera() {
 }
 function render(result) {
   if (!result) return;
-  const hold = result.continuous_hold_ms || 0, required = result.required_hold_ms || 5000;
+  const hold = result.continuous_hold_ms || 0, required = result.required_hold_ms || 2000;
   $('hold-seconds').textContent = (hold / 1000).toFixed(1);
   $('required-seconds').textContent = (required / 1000).toFixed(1);
   $('hold-progress').max = required;
@@ -49,7 +49,7 @@ function render(result) {
   if (mode === 'running') {
     $('state-label').textContent = labels[result.state] || result.state;
     $('state-label').dataset.state = result.state;
-    $('status-message').textContent = result.state === 'cooldown' ? '通知しました。次の判定まで待機しています。' : result.notify ? '通知しました。続けて判定します。次の通知には新たに5秒の保持が必要です。' : result.reason === 'insufficient_visibility' ? '手元が見えるようにカメラの位置を調整してください。' : '手元を映して、スマホを持つ・置く動作を試してください。';
+    $('status-message').textContent = result.state === 'cooldown' ? '通知しました。次の判定まで待機しています。' : result.notify ? `通知しました。続けて判定します。次の通知には新たに${required / 1000}秒の保持が必要です。` : result.reason === 'insufficient_visibility' ? '手元が見えるようにカメラの位置を調整してください。' : '手元を映して、スマホを持つ・置く動作を試してください。';
   }
 }
 function prepareSound() {

@@ -5,7 +5,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   captureIntervalMs: 1000,
   phoneThreshold: 0.8,
   observableThreshold: 0.7,
-  requiredHoldMs: 5000,
+  requiredHoldMs: 2000,
   cooldownMs: 0,
   maxSampleGapMs: 2500,
   decisionTimeoutMs: 10_000,

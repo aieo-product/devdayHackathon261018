@@ -35,27 +35,27 @@ try {
   started = true;
   console.log(`provider=${health.provider}; session created; ${imagePath ? 'supplied image' : 'synthetic fixture (MOCK only)'}`);
   let waitMs = 0;
-  for (let i = 1; i <= 6; i += 1) {
+  for (let i = 1; i <= 3; i += 1) {
     await sleep(waitMs);
     const result = await client.frame(image, { frameId: `smoke-${i}` });
     assert.ok(result, 'frame result');
     assert.equal(result.provider, health.provider, 'provider stays explicit');
-    assert.equal(result.required_hold_ms, 5000, 'API owns the five-second requirement');
+    assert.equal(result.required_hold_ms, 2000, 'API owns the two-second requirement');
     assert.equal(typeof result.continuous_hold_ms, 'number', 'API reports observed holding duration');
-    if (result.notify) assert.ok(result.continuous_hold_ms >= result.required_hold_ms, 'notification requires a confirmed five-second hold');
+    if (result.notify) assert.ok(result.continuous_hold_ms >= result.required_hold_ms, 'notification requires a confirmed two-second hold');
     if (result.notify) notifications += 1;
     console.log(`frame ${i}: ${result.state}, held=${result.continuous_hold_ms}ms, notify=${result.notify}, reason=${result.reason}`);
     waitMs = result.next_capture_after_ms;
   }
-  if (args.includes('--expect-notify')) assert.equal(notifications, 1, 'exactly one notification after a five-second hold');
-  const duplicate = await client.frame(image, { frameId: 'smoke-6' });
+  if (args.includes('--expect-notify')) assert.equal(notifications, 1, 'exactly one notification after a two-second hold');
+  const duplicate = await client.frame(image, { frameId: 'smoke-3' });
   assert.equal(duplicate.notify, false, 'duplicate frame cannot notify again');
   assert.equal((await client.pause()).state, 'paused');
   assert.equal(await client.frame(image), null, 'paused client sends no image');
   assert.ok(await client.resume());
   assert.equal((await client.end()).state, 'ended');
   started = false;
-  console.log('PASS: create → 6 frames / five-second hold → duplicate → pause → resume → end');
+  console.log('PASS: create → 3 frames / two-second hold → duplicate → pause → resume → end');
 } finally {
   if (started) await client.end().catch(() => {});
 }
