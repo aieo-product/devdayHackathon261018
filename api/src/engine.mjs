@@ -5,8 +5,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   captureIntervalMs: 1000,
   phoneThreshold: 0.8,
   observableThreshold: 0.7,
-  requiredHoldMs: 5000,
-  cooldownMs: 60_000,
+  requiredHoldMs: 2000,
+  cooldownMs: 0,
   maxSampleGapMs: 2500,
   decisionTimeoutMs: 10_000,
   maxResultAgeMs: 10_000,
@@ -72,6 +72,16 @@ export class FocusEngine {
       session.state = 'ended';
       session.endedAt = session.expiresAt;
       session.reason = 'session_expired';
+    } else if (this.settings.cooldownMs <= 0 && (session.cooldownUntil > 0 || session.state === 'cooldown')) {
+      // Persisted sessions may still carry the cooldown from an earlier deployment,
+      // including sessions that were paused during that cooldown.
+      session.cooldownUntil = 0;
+      this.resetHold(session);
+      session.lastSampleAt = null;
+      if (session.state === 'cooldown') {
+        session.state = 'observing';
+        session.reason = 'cooldown_disabled';
+      }
     } else if (session.state === 'cooldown' && now >= session.cooldownUntil) {
       session.state = 'observing';
       this.resetHold(session);
@@ -225,12 +235,20 @@ export class FocusEngine {
         session.holdStartedAt ??= now;
         session.continuousHoldMs = now - session.holdStartedAt;
         if (session.continuousHoldMs >= this.settings.requiredHoldMs) {
-          session.state = 'cooldown';
-          session.cooldownUntil = this.clock() + this.settings.cooldownMs;
+          const confirmedHoldMs = session.continuousHoldMs;
+          const cooldownEnabled = this.settings.cooldownMs > 0;
+          session.state = cooldownEnabled ? 'cooldown' : 'observing';
+          session.cooldownUntil = cooldownEnabled ? this.clock() + this.settings.cooldownMs : 0;
           session.count = 0;
+          if (!cooldownEnabled) {
+            // Keep sampling, but require a new observed hold before another alert.
+            this.resetHold(session);
+            session.lastSampleAt = null;
+          }
           session.reason = 'phone_use_confirmed';
           return this.snapshot(session, {
             notify: true, notification_id: randomUUID(), message: 'スマホを置いて、作業に戻りませんか？',
+            continuous_hold_ms: confirmedHoldMs,
           });
         }
         session.state = 'suspected';

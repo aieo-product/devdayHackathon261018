@@ -3,7 +3,7 @@
   "info": {
     "title": "Focus 共通判定API（Cloudflare Worker）",
     "version": "1.0.0",
-    "description": "REST + Bearer。公開仕様は認証不要のGET /docsと/openapi.json。API利用者のCloudflareメンバー登録は不要。FOCUS_API_TOKENは別経路で共有、OPENAI_API_KEYはサーバー専用。状態はSQLite Durable Objectsへ保存。mockは画像解析しない。実時間で正確に5秒後の通知は保証しない。"
+    "description": "REST + Bearer。公開仕様は認証不要のGET /docsと/openapi.json。API利用者のCloudflareメンバー登録は不要。FOCUS_API_TOKENは別経路で共有、OPENAI_API_KEYはサーバー専用。状態はSQLite Durable Objectsへ保存。mockは画像解析しない。実時間で正確に2秒後の通知は保証しない。 通知後のクールダウンは既定で0。次の陽性画像から新たに2秒の確認を始め、繰り返し通知できる。"
   },
   "servers": [
     {
@@ -666,7 +666,7 @@
       ],
       "post": {
         "operationId": "submitFrame",
-        "description": "同一セッションで1画像ずつ送信。next_capture_after_msに従う。観測間隔2500ms超は保持進捗リセット。陽性画像で5000msを確認後に通知。画像自体は永続保存しない。",
+        "description": "同一セッションで1画像ずつ送信。next_capture_after_msに従う。観測間隔2500ms超は保持進捗リセット。陽性画像で2000msを確認後に通知。画像自体は永続保存しない。 通知後のクールダウンはなく、次の新しい陽性画像から新たな2秒の確認を始める。",
         "parameters": [
           {
             "name": "X-Frame-Id",
@@ -960,7 +960,8 @@
               "unknown",
               "paused",
               "ended"
-            ]
+            ],
+            "description": "既定では通知応答もobserving。cooldownは待機を設定したサーバーとの互換用。"
           },
           "notify": {
             "type": "boolean",
@@ -1012,20 +1013,22 @@
           "continuous_hold_ms": {
             "type": "integer",
             "minimum": 0,
-            "description": "陽性画像の受理時刻による確認済み継続時間。GETや端末タイマーでは増えない。"
+            "description": "陽性画像の受理時刻による確認済み継続時間。通知応答は達成時間を返し、次の新しい陽性画像から新たな2秒の確認を始める。GETや端末タイマーでは増えない。"
           },
           "required_hold_ms": {
             "type": "integer",
             "minimum": 0,
-            "const": 5000
+            "const": 2000
           },
           "cooldown_remaining_ms": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "description": "互換用の通知抑制残り時間。既定では常に0。"
           },
           "next_capture_after_ms": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "description": "次の撮影まで待つ時間。通知後も通常の撮影間隔を返す。paused/endedでは撮影しない。"
           }
         }
       },
