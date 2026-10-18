@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Readable } from 'node:stream';
 import { DesktopOverlayClient } from '../desktop-overlay-client.js';
+import { createDesktopOverlayBridge } from '../desktop-overlay-bridge.mjs';
 
 const notice = { character: 'cloud', message: 'いまの作業に戻ろう！', kind: 'detect', intensity: 'max', reduced: false };
 const response = (body, ok = true) => ({ ok, json: async () => body });
@@ -34,25 +36,47 @@ test('connection and delivery failures return false so the caller can use browse
   assert.equal(await client.show(notice), true);
 });
 
-test('normal clear waits for an in-flight delivery and cancels its accepted result', async () => {
+test('normal clear reaches the bridge before a delayed detect and prevents a late native notification', async () => {
   const pending = deferred();
   const calls = [];
-  const client = new DesktopOverlayClient({ sourceId: 'serial-tab', fetchImpl: async (url, options) => {
+  const bridge = createDesktopOverlayBridge({ token: 'synthetic-stop-test-credential', now: () => 1000 });
+  async function deliver(pathname, body) {
+    const req = Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]);
+    Object.assign(req, {
+      method: body === undefined ? 'GET' : 'POST', url: pathname, socket: { localPort: 4327 },
+      headers: { host: '127.0.0.1:4327', origin: 'http://127.0.0.1:4327',
+        'content-type': 'application/json', authorization: 'Bearer synthetic-stop-test-credential' },
+    });
+    let status, payload;
+    await bridge.handle(req, {
+      writeHead(value) { status = value; return this; },
+      end(value) { payload = value; },
+    }, pathname);
+    return response(JSON.parse(payload), status >= 200 && status < 300);
+  }
+  const poll = () => deliver('/api/desktop-overlay/native/poll').then(result => result.json());
+  await poll(); // Mark the synthetic native receiver connected without opening a server or app.
+  const client = new DesktopOverlayClient({ sourceId: 'stopping-tab', fetchImpl: async (url, options) => {
     const body = JSON.parse(options.body);
     calls.push(body);
-    return body.action === 'detect' ? pending.promise : response({ delivered: true });
+    if (body.action === 'detect') await pending.promise;
+    return deliver(url, body);
   } });
   const showing = client.show(notice);
   await Promise.resolve();
   assert.deepEqual(calls.map(body => body.action), ['detect']);
-  const clearing = client.clear();
-  await Promise.resolve();
-  assert.equal(calls.length, 1);
-  pending.resolve(response({ delivered: true }));
+  let cleared;
+  try {
+    const clearing = client.clear();
+    assert.deepEqual(calls.map(body => [body.action, body.revision]), [['detect', 1], ['clear', 2]],
+      'normal stop must dispatch immediately instead of waiting for the old response');
+    await clearing;
+    cleared = await poll();
+    assert.equal(cleared.event.action, 'clear');
+  } finally { pending.resolve(); }
   assert.equal(await showing, false);
-  await clearing;
-  assert.deepEqual(calls.map(body => [body.action, body.revision]), [['detect', 1], ['clear', 2]]);
-  assert.equal(calls.every(body => body.sourceId === 'serial-tab'), true);
+  assert.deepEqual(await poll(), cleared, 'the older detect must not replace the native clear event');
+  assert.equal(calls.every(body => body.sourceId === 'stopping-tab'), true);
 });
 
 test('a canceled queued show is never sent after a newer clear', async () => {

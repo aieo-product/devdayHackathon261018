@@ -29,9 +29,9 @@ export class DesktopOverlayClient {
 
   clear({ keepalive = false } = {}) {
     const revision = ++this.revision;
-    const send = () => this._post({ action: 'clear', sourceId: this.sourceId, revision }, { keepalive }).catch(() => false);
-    // On page exit dispatch immediately: deferred microtasks may not survive unloading.
-    return keepalive ? send() : this._enqueue(send);
+    // Stop immediately even while a detect request is pending. The bridge uses
+    // this newer revision to reject an older detect that arrives after the clear.
+    return this._post({ action: 'clear', sourceId: this.sourceId, revision }, { keepalive }).catch(() => false);
   }
 
   _enqueue(operation) {
