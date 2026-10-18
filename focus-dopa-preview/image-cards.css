@@ -1,0 +1,12 @@
+.lyric-showcase { display:grid;grid-template-columns:1fr auto; }
+.image-card-gallery { grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;position:relative; }
+.image-card-gallery button { min-width:0;padding:0;text-align:left;overflow:hidden;background:#101323;border:1px solid #88719d;border-radius:10px;box-shadow:0 4px 0 #0d0818; }
+.image-card-gallery button:hover { border-color:#f7ffb5;transform:translateY(-3px); }
+.image-card-gallery .dots-type-thumbnail { position:relative;aspect-ratio:4/3;margin:10px; }
+.image-card-gallery .dots-type-thumbnail svg { position:absolute;inset:0;width:100%;height:100%; }
+.image-card-gallery .dots-type-thumbnail img { position:absolute;top:31%;left:16%;width:68%;height:58%;object-fit:contain; }
+.image-card-gallery span { display:flex;justify-content:space-between;align-items:center;padding:10px 12px;font-size:10px;font-weight:800;letter-spacing:1px;color:#e8e3f5; }
+.image-card-gallery b { color:#d9ff56;font-size:10px;white-space:nowrap; }
+/* The generated detection card contains the full message; keep its live notice accessible without covering the artwork. */
+body:has(#lyric-stage[data-lyric-render="image"]) .detection-alert { width:1px;height:1px;padding:0;border:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap; }
+@media(max-width:700px) { .lyric-showcase { grid-template-columns:1fr; } .image-card-gallery { gap:8px; } .image-card-gallery span { font-size:8px;padding:8px 6px;letter-spacing:0;flex-wrap:wrap;gap:4px; } }

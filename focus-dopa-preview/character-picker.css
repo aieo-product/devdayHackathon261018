@@ -1,0 +1,124 @@
+.character-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  width: 100%;
+  margin: 12px 0 18px;
+}
+.character-picker .character-choice {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  padding: 10px 13px;
+  border: 1px solid #37415b;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #1a2132, #111726);
+  text-align: left;
+  color: #f4f6ff;
+  cursor: pointer;
+  isolation: isolate;
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.character-picker .character-choice:hover {
+  border-color: var(--character-color);
+  background: linear-gradient(135deg, #242d40, #171e2e);
+}
+.character-picker .character-choice.is-selected {
+  border-color: var(--character-color);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--character-color) 14%, #172033), #151b2b);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--character-color) 18%, transparent), 0 3px 0 #070c16;
+}
+.character-picker .character-choice:focus-visible {
+  outline: 3px solid var(--character-color);
+  outline-offset: 3px;
+}
+.character-picker .character-thumbnail {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 54px;
+  width: 54px;
+  height: 68px;
+}
+.character-picker .character-thumbnail::before {
+  content: '';
+  position: absolute;
+  inset: 8px 0 1px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--character-color) 20%, transparent), transparent 72%);
+  z-index: -1;
+}
+.character-picker .character-thumbnail img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  filter: drop-shadow(0 3px 3px #05091480);
+}
+.character-picker .character-copy { display: block; min-width: 0; padding-right: 11px; }
+.character-picker .character-copy strong {
+  display: block;
+  color: var(--character-color);
+  font-size: 11px;
+  line-height: 1.3;
+  font-weight: 800;
+  letter-spacing: .7px;
+}
+.character-picker .character-copy small {
+  display: block;
+  margin-top: 4px;
+  color: #adb8d0;
+  font-size: 9px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.character-picker .character-detail {
+  display: block;
+  margin-top: 3px;
+  color: #8796b4;
+  font-size: 8px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.character-picker .character-check {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--character-color);
+  color: #121825;
+  font-size: 10px;
+  font-weight: 900;
+  opacity: 0;
+}
+.character-picker .is-selected .character-check { opacity: 1; }
+@media (max-width: 1050px) {
+  .character-picker { gap: 8px; }
+  .character-picker .character-choice { gap: 7px; padding: 9px; }
+  .character-picker .character-thumbnail { flex-basis: 48px; width: 48px; height: 62px; }
+  .character-picker .character-copy strong { font-size: 9px; letter-spacing: .3px; }
+  .character-picker .character-copy small { font-size: 8px; }
+}
+@media (max-width: 680px) {
+  .character-picker { gap: 6px; margin-block: 10px 15px; }
+  .character-picker .character-choice { flex-direction: column; justify-content: flex-start; gap: 5px; padding: 8px 4px 9px; text-align: center; border-radius: 10px; }
+  .character-picker .character-thumbnail { flex: 0 0 64px; width: 52px; height: 64px; }
+  .character-picker .character-copy { padding-right: 0; }
+  .character-picker .character-copy strong { font-size: 8px; letter-spacing: .1px; }
+  .character-picker .character-copy small { font-size: 7px; margin-top: 3px; line-height: 1.4; }
+  .character-picker .character-detail { font-size: 7px; margin-top: 2px; }
+  .character-picker .character-check { top: 5px; right: 5px; width: 12px; height: 12px; font-size: 8px; }
+}
+body[data-intensity='off'] .character-picker .character-choice { transition: none; }
+body[data-intensity='off'] .character-picker .character-choice:active { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .character-picker .character-choice { transition: none !important; }
+  .character-picker .character-choice:active { transform: none; }
+}

@@ -1,0 +1,262 @@
+/* A finite, viewport-wide cue. It never captures clicks or changes page layout. */
+.lyric-motion {
+  position: fixed;
+  inset: 0;
+  z-index: 72;
+  overflow: hidden;
+  overflow: clip;
+  contain: layout paint;
+  isolation: isolate;
+  pointer-events: none;
+  user-select: none;
+  font-family: var(--font, sans-serif);
+}
+.lyric-motion:empty { display: none; }
+.lyric-motion *, .lyric-motion *::before, .lyric-motion *::after { pointer-events: none; }
+/* Flat DOTS silhouette with typography placed directly on its body. */
+.lyric-motion .lyric-image-atmosphere {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: #06091538;
+}
+.lyric-motion .lyric-image-frame {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 1;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+.lyric-motion .lyric-dots-panel {
+  position: relative;
+  width: min(calc(100vw - 24px), calc(133.333vh - 32px));
+  width: min(calc(100vw - 24px), calc(133.333dvh - 32px));
+  aspect-ratio: 4 / 3;
+}
+.lyric-motion .lyric-dots-outline {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: #CEFF34;
+  stroke: none;
+}
+.lyric-motion .lyric-dots-content {
+  position: absolute;
+  /* The PNGs' transparent top/bottom margins keep visible ink inside the body. */
+  inset: 31% 16% 11%;
+  container-type: size;
+  overflow: hidden;
+}
+.lyric-motion .lyric-generated-card {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: contain;
+  object-position: center;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.lyric-motion .lyric-type-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2%;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  color: #101b45;
+  font-weight: 1000;
+  font-style: italic;
+  line-height: 1.12;
+  white-space: nowrap;
+}
+.lyric-motion .lyric-type-kicker {
+  font-size: clamp(11px, 3.7vw, 55px);
+  font-size: clamp(11px, 6.5cqw, 68px);
+  letter-spacing: -.08em;
+}
+.lyric-motion .lyric-type-main {
+  color: #ff2b95;
+  font-size: clamp(30px, 11vw, 180px);
+  font-size: clamp(30px, 23cqw, 260px);
+  letter-spacing: -.09em;
+  paint-order: stroke fill;
+  -webkit-text-stroke: clamp(1px, .4cqw, 5px) #101b45;
+  text-shadow: .025em .04em 0 #101b45;
+}
+.lyric-motion .lyric-type-caption {
+  font-size: clamp(8px, 2vw, 26px);
+  font-size: clamp(8px, 4cqw, 38px);
+  letter-spacing: .04em;
+}
+@media (max-width: 650px) {
+  .lyric-motion .lyric-dots-panel {
+    width: min(calc(100vw - 16px), calc(133.333vh - 24px));
+    width: min(calc(100vw - 16px), calc(133.333dvh - 24px));
+  }
+}
+@media (prefers-reduced-motion: reduce) { .lyric-motion { display: none; } }
+
+/* Always visible entry point, independent of the selected character pattern. */
+.lyric-showcase { display:flex; align-items:center; justify-content:space-between; gap:24px; margin:0 0 18px; padding:22px 26px; position:relative; overflow:hidden; border:2px solid #ff68c7; border-radius:18px; background:linear-gradient(115deg,#531647,#281746 58%,#152c44); box-shadow:0 5px 0 #421345,0 0 25px #ff38c222; }
+.lyric-showcase::before { content:'Aa'; position:absolute; right:34%; top:-38px; font-size:190px; font-weight:1000; font-style:italic; line-height:1; color:#ffffff05; -webkit-text-stroke:1px #ffffff18; pointer-events:none; }
+.lyric-showcase .eyebrow { color:#ffb4de; font-size:10px; letter-spacing:2.3px; }
+.lyric-showcase h2 { display:block; color:#fff; font-size:clamp(18px,2vw,26px); margin:9px 0 7px; letter-spacing:-.7px; text-shadow:2px 3px #81135b; }
+.lyric-showcase p { margin:0; color:#dec8e8; font-size:11px; }
+.lyric-showcase-actions { display:flex; flex-direction:column; gap:8px; min-width:260px; position:relative; }
+.lyric-showcase-actions button { border-radius:9px; font-weight:850; padding:13px 16px; letter-spacing:.2px; font-size:13px; }
+#play-lyric { background:#dcff39; color:#171c09; border:1px solid #f3ffaf; box-shadow:0 3px 0 #789027,0 0 18px #cdff3035; }
+#play-lyric:hover { filter:brightness(1.1); transform:translateY(-1px); }
+.lyric-showcase .lyric-detection-button { background:#ffffff08; border:1px solid #c878b1; color:#ffe0f1; font-size:11px; padding:9px; }
+#lyric-preview-status { text-align:center; font-size:10px; color:#d9beda; min-height:14px; }
+@media(max-width:700px) { .lyric-showcase { align-items:stretch; flex-direction:column; padding:20px; gap:18px; } .lyric-showcase-actions { min-width:0; } .lyric-showcase h2 { font-size:21px; } }
+
+/* Detection has its own warning scene. These styles never affect normal cues. */
+.lyric-motion .lyric-alarm-scene {
+  position: absolute;
+  inset: 0;
+  isolation: isolate;
+  overflow: hidden;
+  overflow: clip;
+}
+.lyric-alarm-scene .lyric-alarm-atmosphere {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, #130b1c99 25%, #4b0a1ce6 100%);
+  box-shadow: inset 0 0 100px #ff27444a;
+}
+.lyric-alarm-scene .lyric-alarm-beacon {
+  position: absolute;
+  inset: -75%;
+  z-index: 1;
+  background: conic-gradient(from -28deg, transparent 0deg 16deg, #ff27400d 26deg, #ff27405c 43deg, #ff274019 57deg, transparent 77deg 194deg, #ff34420d 209deg, #ff344237 225deg, transparent 250deg 360deg);
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+.lyric-alarm-scene .lyric-alarm-caution {
+  position: absolute;
+  left: -40px;
+  right: -40px;
+  z-index: 6;
+  height: clamp(12px, 2.1vh, 21px);
+  background: repeating-linear-gradient(-45deg, #ffbd37 0 16px, #24101a 16px 30px, #ff3751 30px 44px, #24101a 44px 58px);
+  box-shadow: 0 0 20px #ff355338;
+}
+.lyric-alarm-scene .lyric-alarm-caution-top { top: 0; }
+.lyric-alarm-scene .lyric-alarm-caution-bottom { bottom: 0; }
+.lyric-alarm-scene .lyric-alarm-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: clamp(7px, .8vw, 12px);
+  z-index: 6;
+  background: repeating-linear-gradient(-45deg, #ffb52e 0 12px, #27101c 12px 25px, #ff3652 25px 38px, #27101c 38px 50px);
+}
+.lyric-alarm-scene .lyric-alarm-edge-left { left: 0; }
+.lyric-alarm-scene .lyric-alarm-edge-right { right: 0; }
+.lyric-alarm-scene .lyric-alarm-heading {
+  position: absolute;
+  z-index: 5;
+  top: clamp(25px, 3.8vh, 48px);
+  left: 0;
+  right: 0;
+  text-align: center;
+  will-change: transform;
+}
+.lyric-alarm-scene .lyric-alarm-heading-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(12px, 1.7vw, 27px);
+}
+.lyric-alarm-scene .lyric-alarm-icon {
+  width: clamp(45px, 6vw, 83px);
+  height: clamp(42px, 5.6vw, 78px);
+  flex: none;
+  filter: drop-shadow(3px 4px 0 #9d1a31);
+}
+.lyric-alarm-scene .lyric-alarm-title {
+  color: #ffcb51;
+  font: 1000 clamp(48px, 7vw, 102px)/.95 Arial, Helvetica, sans-serif;
+  letter-spacing: .055em;
+  font-style: italic;
+  text-shadow: 4px 5px 0 #aa1f37, 0 0 27px #ff52333d;
+}
+.lyric-alarm-scene .lyric-alarm-subtitle {
+  margin-top: 11px;
+  color: #ffd9ac;
+  font-size: clamp(10px, 1.1vw, 14px);
+  font-weight: 800;
+  letter-spacing: .45em;
+}
+.lyric-alarm-scene .lyric-alarm-rail {
+  position: absolute;
+  z-index: 2;
+  width: 53%;
+  padding: clamp(13px, 2.2vh, 24px) 30px;
+  color: #471421;
+  background: #ffb52e;
+  border-top: 4px solid #ff3b51;
+  border-bottom: 4px solid #ff3b51;
+  box-shadow: 0 0 0 3px #20101ce6;
+  font: 950 clamp(12px, 2vw, 27px)/1 Arial, Helvetica, sans-serif;
+  font-style: italic;
+  letter-spacing: .14em;
+  white-space: nowrap;
+  will-change: transform;
+}
+.lyric-alarm-scene .lyric-alarm-rail-left { left: -5%; top: 48%; }
+.lyric-alarm-scene .lyric-alarm-rail-right { right: -5%; top: 48%; text-align: right; }
+.lyric-alarm-scene .lyric-alarm-stage {
+  position: absolute;
+  inset: 18% 0 4%;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  transform-origin: center;
+  will-change: transform;
+}
+.lyric-alarm-scene .lyric-alarm-dots {
+  width: min(calc(100vw - 52px), 104vh);
+  width: min(calc(100vw - 52px), 104dvh);
+}
+.lyric-alarm-scene .lyric-dots-outline { fill: #FFB52E; }
+.lyric-alarm-scene .lyric-alarm-footer {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  right: 0;
+  bottom: clamp(29px, 3.8vh, 46px);
+  text-align: center;
+  font-size: clamp(8px, .9vw, 12px);
+  font-weight: 900;
+  letter-spacing: .5em;
+  color: #ffd99e;
+}
+.lyric-alarm-scene .lyric-alarm-fallback .lyric-type-main {
+  color: #b31d32;
+  font-size: clamp(24px, 14cqw, 170px);
+  -webkit-text-stroke-color: #461525;
+  text-shadow: .025em .04em 0 #461525;
+}
+.lyric-motion[data-lyric-level=pop] .lyric-alarm-beacon { opacity: .45; }
+@media (max-width: 650px) {
+  .lyric-alarm-scene .lyric-alarm-heading { top: 11%; }
+  .lyric-alarm-scene .lyric-alarm-title { font-size: clamp(48px, 15vw, 74px); }
+  .lyric-alarm-scene .lyric-alarm-stage { inset: 23% 0 13%; }
+  .lyric-alarm-scene .lyric-alarm-dots { width: calc(100vw - 24px); }
+  .lyric-alarm-scene .lyric-alarm-rail { width: 58%; font-size: 13px; padding: 16px 20px; }
+  .lyric-alarm-scene .lyric-alarm-footer { bottom: 14%; font-size: 9px; letter-spacing: .24em; }
+}
+@media (max-height: 500px) and (min-width: 651px) {
+  .lyric-alarm-scene .lyric-alarm-title { font-size: 38px; }
+  .lyric-alarm-scene .lyric-alarm-icon { width: 40px; height: 37px; }
+  .lyric-alarm-scene .lyric-alarm-subtitle { font-size: 9px; margin-top: 5px; }
+  .lyric-alarm-scene .lyric-alarm-heading { top: 23px; }
+}
