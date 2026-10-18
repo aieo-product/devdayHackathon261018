@@ -487,10 +487,14 @@ void worker(void*) {
           doc["duration_seconds"] = FocusConfig::SESSION_DURATION_SECONDS;
           uint32_t creationStarted = millis();
           ok = postJson(command, "/v1/sessions", doc, 201, snapshot, error);
-          if (ok && isCurrent(command)) {
+          if (ok) {
             portENTER_CRITICAL(&commandLock);
-            sessionDeadlineMs = creationStarted + FocusConfig::SESSION_DURATION_SECONDS * 1000UL;
-            timerActive = true;
+            // A pending detection pause keeps this session's original deadline.
+            // END (including END -> START) must never revive the old timer.
+            if (requested.endSequence == command.endSequence && requested.intent != Intent::End) {
+              sessionDeadlineMs = creationStarted + FocusConfig::SESSION_DURATION_SECONDS * 1000UL;
+              timerActive = true;
+            }
             portEXIT_CRITICAL(&commandLock);
           }
           if (ok) {
