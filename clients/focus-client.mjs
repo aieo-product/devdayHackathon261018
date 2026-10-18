@@ -13,7 +13,7 @@ export class FocusClient {
   #snapshot = null; #deadline = 0; #timer; #flight = null;
   #queue = Promise.resolve(); #starting = false; #notifications = new Set();
 
-  constructor({ baseUrl, token, fetchImpl = globalThis.fetch }) {
+  constructor({ baseUrl, token, fetchImpl = globalThis.fetch.bind(globalThis) }) {
     const url = new URL(baseUrl);
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
       throw new TypeError('baseUrl must be an HTTP(S) URL without credentials, query or fragment');

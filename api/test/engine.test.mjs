@@ -15,16 +15,16 @@ function harness({ decide, settings } = {}) {
   return { engine, owner, session, frame, advance(ms = 1000) { now += ms; }, result(value) { result = value; }, get calls() { return calls; } };
 }
 
-test('five seconds of positive samples notify once; cooldown requires a fresh five-second hold', async () => {
-  const h = harness();
+test('an explicitly enabled cooldown requires a fresh two-second hold afterward', async () => {
+  const h = harness({ settings: { cooldownMs: 60000 } });
   assert.equal(h.session.continuous_hold_ms, 0);
-  assert.equal(h.session.required_hold_ms, 5000);
+  assert.equal(h.session.required_hold_ms, 2000);
   const a = await h.frame('1');
   assert.equal(a.state, 'suspected');
   assert.equal(a.consecutive_count, 1);
   assert.equal(a.continuous_hold_ms, 0);
   assert.equal(a.notify, false);
-  for (let second = 1; second < 5; second += 1) {
+  for (let second = 1; second < 2; second += 1) {
     h.advance();
     const progress = await h.frame(`first-${second}`);
     assert.equal(progress.notify, false);
@@ -33,20 +33,20 @@ test('five seconds of positive samples notify once; cooldown requires a fresh fi
   h.advance();
   const notification = await h.frame('notify');
   assert.equal(notification.notify, true);
-  assert.equal(notification.continuous_hold_ms, 5000);
+  assert.equal(notification.continuous_hold_ms, 2000);
   assert.equal(notification.state, 'cooldown');
   assert.match(notification.notification_id, /^[\da-f-]+$/);
   assert.equal(notification.next_capture_after_ms, 60000);
   assert.equal((await h.frame('notify')).notify, false);
   assert.equal((await h.frame('during-cooldown')).reason, 'cooldown_active');
-  assert.equal(h.calls, 6);
+  assert.equal(h.calls, 3);
   h.advance(60000);
   assert.equal((await h.frame('notify')).reason, 'duplicate_frame');
   assert.equal((await h.frame('during-cooldown')).reason, 'duplicate_frame');
   const fresh = await h.frame('after-cooldown');
   assert.equal(fresh.consecutive_count, 1);
   assert.equal(fresh.continuous_hold_ms, 0);
-  for (let second = 1; second < 5; second += 1) {
+  for (let second = 1; second < 2; second += 1) {
     h.advance();
     assert.equal((await h.frame(`next-${second}`)).notify, false);
   }
@@ -56,24 +56,74 @@ test('five seconds of positive samples notify once; cooldown requires a fresh fi
   assert.notEqual(next.notification_id, notification.notification_id);
 });
 
-test('4999ms does not notify; a fresh positive at exactly 5000ms notifies without another interval', async () => {
+test('default sampling continues after an alert and repeated alerts each require a fresh two-second hold', async () => {
+  const h = harness();
+  let previousNotificationId;
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    if (cycle) h.advance();
+    for (let second = 0; second <= 2; second += 1) {
+      if (second) h.advance();
+      const result = await h.frame(`cycle-${cycle}-${second}`);
+      assert.equal(result.continuous_hold_ms, second * 1000);
+      assert.equal(result.notify, second === 2);
+      assert.equal(result.cooldown_remaining_ms, 0);
+      assert.equal(result.next_capture_after_ms, 1000);
+      if (second === 2) {
+        assert.equal(result.state, 'observing');
+        assert.ok(result.notification_id);
+        assert.notEqual(result.notification_id, previousNotificationId);
+        previousNotificationId = result.notification_id;
+        const duplicate = await h.frame(`cycle-${cycle}-${second}`);
+        assert.equal(duplicate.reason, 'duplicate_frame');
+        assert.equal(duplicate.notify, false);
+        const snapshot = h.engine.get({ owner: h.owner, sessionId: h.session.session_id });
+        assert.equal(snapshot.notify, false);
+        assert.equal(snapshot.continuous_hold_ms, 0, 'new hold starts after the notification');
+      }
+    }
+  }
+  assert.equal(h.calls, 9, 'duplicates never invoke the provider');
+});
+
+test('disabled cooldown clears persisted active and paused cooldowns without replaying a notification', async () => {
+  for (const state of ['cooldown', 'paused']) {
+    const h = harness();
+    const persisted = h.engine.sessions.get(h.session.session_id);
+    Object.assign(persisted, { state, cooldownUntil: 60000, holdStartedAt: 0, continuousHoldMs: 5000, lastSampleAt: 0 });
+    const snapshot = h.engine.get({ owner: h.owner, sessionId: h.session.session_id });
+    assert.equal(snapshot.state, state === 'paused' ? 'paused' : 'observing');
+    assert.equal(snapshot.cooldown_remaining_ms, 0);
+    assert.equal(snapshot.next_capture_after_ms, 0);
+    assert.equal(snapshot.continuous_hold_ms, 0);
+    assert.equal(snapshot.notify, false);
+    if (state === 'paused') {
+      assert.equal(h.engine.control({ owner: h.owner, sessionId: h.session.session_id, action: 'resume' }).state, 'observing');
+    }
+    const fresh = await h.frame('after-deploy');
+    assert.equal(fresh.state, 'suspected');
+    assert.equal(fresh.continuous_hold_ms, 0);
+    assert.equal(fresh.notify, false);
+  }
+});
+
+test('1999ms does not notify; a fresh positive at exactly 2000ms notifies without another interval', async () => {
   const h = harness();
   await h.frame('at-0');
-  for (const gap of [1000, 1000, 1000, 1999]) {
+  for (const gap of [1999]) {
     h.advance(gap);
     const result = await h.frame(`at-${h.calls}`);
     assert.equal(result.notify, false);
   }
   const before = h.engine.get({ owner: h.owner, sessionId: h.session.session_id });
-  assert.equal(before.continuous_hold_ms, 4999);
+  assert.equal(before.continuous_hold_ms, 1999);
   assert.equal(before.next_capture_after_ms, 1);
   h.advance(1);
   const snapshot = h.engine.get({ owner: h.owner, sessionId: h.session.session_id });
   assert.equal(snapshot.notify, false, 'elapsed wall time alone must not notify');
-  assert.equal(snapshot.continuous_hold_ms, 4999, 'GET cannot add unobserved hold time');
+  assert.equal(snapshot.continuous_hold_ms, 1999, 'GET cannot add unobserved hold time');
   assert.equal((await h.frame('at-0')).notify, false, 'duplicate cannot confirm the threshold');
-  const threshold = await h.frame('at-5000');
-  assert.equal(threshold.continuous_hold_ms, 5000);
+  const threshold = await h.frame('at-2000');
+  assert.equal(threshold.continuous_hold_ms, 2000);
   assert.equal(threshold.notify, true);
 });
 
@@ -87,22 +137,13 @@ test('slow inference consumes the sampling wait and cannot count its own latency
   const initial = await first;
   assert.equal(initial.continuous_hold_ms, 0);
   assert.equal(initial.next_capture_after_ms, 0);
-  for (let index = 0; index < 2; index += 1) {
-    const pending = h.frame(`slow-${index}`);
-    await Promise.resolve();
-    h.advance(1500);
-    finish({ phoneProbability: 1, observableProbability: 1 });
-    const result = await pending;
-    assert.equal(result.notify, false);
-    assert.equal(result.continuous_hold_ms, (index + 1) * 1500);
-    assert.equal(result.next_capture_after_ms, 0);
-  }
   const near = h.frame('slow-near');
   await Promise.resolve();
   h.advance(500);
   finish({ phoneProbability: 1, observableProbability: 1 });
   const progress = await near;
-  assert.equal(progress.continuous_hold_ms, 4500);
+  assert.equal(progress.notify, false, 'inference finishing at 2000ms cannot confirm a frame captured at 1500ms');
+  assert.equal(progress.continuous_hold_ms, 1500);
   assert.equal(progress.next_capture_after_ms, 0, 'remaining threshold overrides a full capture interval');
   const threshold = h.frame('slow-threshold');
   await Promise.resolve();
@@ -132,7 +173,7 @@ test('bad visibility, negative activity, or a long sample gap resets positive st
 });
 
 test('2500ms sample gaps preserve holding; larger gaps and provider failures restart its duration', async () => {
-  const h = harness();
+  const h = harness({ settings: { requiredHoldMs: 5000 } }); // Keep the hold open beyond the gap boundary.
   await h.frame('start');
   h.advance(2500);
   assert.equal((await h.frame('boundary-gap')).continuous_hold_ms, 2500);
@@ -159,9 +200,9 @@ test('a negative or unobservable fresh result at the threshold never confirms an
   ]) {
     const h = harness();
     await h.frame('start');
-    h.advance(2500);
+    h.advance(1000);
     await h.frame('middle');
-    h.advance(2500);
+    h.advance(1000);
     h.result(result);
     const threshold = await h.frame('threshold');
     assert.equal(threshold.notify, false);

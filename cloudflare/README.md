@@ -4,12 +4,17 @@ Mac・Reachy Mini・CoreS3が同じREST APIを利用します。RESTは通信形
 
 ## メンバー向け共有先
 
+- **最新の統合仕様（今回の追加を含む）：** [共通API仕様書](https://github.com/aieo-product/devdayHackathon261018/blob/feat/mcp-events-dots/cloudflare/API仕様書.md)
+- **今回の追加：** MCP Events / dots連携、監視デバイスの遠隔ON/OFF、Mac確認画面。[Issue #7](https://github.com/aieo-product/devdayHackathon261018/issues/7) / [PR #10](https://github.com/aieo-product/devdayHackathon261018/pull/10)で共有。
+- **追加機能の接続先：** `https://focus-events-20261018.take-otani.workers.dev`（[詳細・設定](../cloudflare-events/README.md)）。既存判定APIとはURL・トークンが異なります。
 - API入口：https://focus-shared-api-20261018.take-otani.workers.dev/
-- レビュー用仕様書：https://focus-shared-api-20261018.take-otani.workers.dev/docs
-- OpenAPI：https://focus-shared-api-20261018.take-otani.workers.dev/openapi.json
+- 判定Worker配備時点の仕様書：https://focus-shared-api-20261018.take-otani.workers.dev/docs
+- 判定API専用OpenAPI：https://focus-shared-api-20261018.take-otani.workers.dev/openapi.json
 - 設定状態：https://focus-shared-api-20261018.take-otani.workers.dev/health
 
 これらのGETは認証不要です。`/`は利用可能なURLを返すJSON、`/docs`はMarkdown、`/openapi.json`はOpenAPI JSONです。API利用者にCloudflareのメンバー登録は不要です。`/v1/`呼び出し用の`FOCUS_API_TOKEN`は別経路で共有し、`OPENAI_API_KEY`はサーバー専用とします。`/health`の`configured`で設定状態を確認してください。
+
+今回の文書更新では安定した判定Workerを再配備しません。追加機能を含めて周知するときは上のGitHub版仕様書を共有してください。既存の2秒判定・クールダウンなし・セッションAPIは変更していません。
 
 ## 起動と配備
 
@@ -35,6 +40,28 @@ npm run deploy:worker
 `start:worker`は`wrangler dev -c cloudflare/wrangler.jsonc`、`check:worker`はdry-run、`test:worker`はNodeテストです。配備設定の既定プロバイダーは`openai`です。`DECISION_PROVIDER`は`mock` / `openai`。`OPENAI_API_KEY`はサーバー専用です。`/health`の`configured`は設定の確認で、OpenAIとの疎通や精度の保証ではありません。mockは画像を解析しません。
 
 公開URL：`https://focus-shared-api-20261018.take-otani.workers.dev`。以下の`BASE_URL`をそのHTTPS URLへ置換します。ローカルは`http://127.0.0.1:8787`です。Webチームは実際のOriginを`ALLOWED_ORIGINS`へ完全一致で登録してください（パス・末尾スラッシュ・ワイルドカードなし）。既定は`http://localhost:3000,http://localhost:5173`。端末のHTTP通信にはCORS設定は不要です。
+
+## 実APIの疎通確認とエラー診断
+
+`cloudflare/.env.connection` に `FOCUS_API_URL` と端末接続用の `FOCUS_API_TOKEN` を設定して、リポジトリ直下で次を実行します。このファイルはGit管理対象外です。OpenAIキーはWorkerのSecretに設定します。
+
+```sh
+npm run smoke:worker
+# 任意：自分で用意したJPEG/PNGを使う
+FOCUS_SMOKE_IMAGE_PATH=/path/to/frame.jpg npm run smoke:worker
+```
+
+既定では有効な無地PNGを生成し、実Decisions APIへ1枚だけ送ります。キーが有効であることとレスポンスの解析を確かめる試験で、スマホ認識精度の試験ではありません。生成画像では `insufficient_visibility` が正常な判定になり得ます。`provider: openai` と両確率が0〜1の数値であることを確認し、HTTP 200でも `provider_error` や確率nullなら失敗終了します。セッション取得・重複送信・一時停止・再開も確認し、試験セッションは終了します。実API利用分の料金が発生する場合があります。
+
+`provider_error` は上流の非2xx応答です。Workerのサーバーログには次のような安全な診断を記録します。
+
+```json
+{"event":"openai_decision_error","status":401,"code":"invalid_api_key","type":"invalid_request_error"}
+```
+
+記録するのはHTTPステータスと許可したエラー分類だけです。キー・画像・上流のメッセージ・ヘッダーは記録しません。未知の分類は `unknown` になります。利用者向けレスポンスは引き続き `reason: provider_error` です。
+
+`401 / invalid_api_key` の場合、Cloudflareの **Workers & Pages → focus-shared-api-20261018 → Settings → Variables and Secrets** で `OPENAI_API_KEY` を有効なOpenAI APIキーの値に更新し、Deployしてから再試験します。`FOCUS_API_TOKEN` やCloudflare APIトークンはここには使いません。`configured:true` は値の存在確認にすぎず、OpenAIが認証したことを意味しません。
 
 ## 操作
 
@@ -97,7 +124,7 @@ finally:
                   json={'action': 'end'}, timeout=15).raise_for_status()
 ```
 
-通知は新しいフレーム応答の`notify: true`だけで実行します。GET・保存済みsnapshot・端末タイマーから通知しません。最初の陽性画像から、新しい陽性画像で5000msの継続保持を確認すると通知します。観測間隔が2500msを超えると進捗をリセットします。`next_capture_after_ms`を待ち、さらに固定1秒を足さないでください。遅い通信・推論では継続判定が成立しない場合があり、実時間で正確に5秒後の通知は保証しません。通知後は60秒待機します。pause/endは撮影を即停止し、遅れて届く応答も破棄します。pause中もセッション期限は進みます。
+通知は新しいフレーム応答の`notify: true`だけで実行します。GET・保存済みsnapshot・端末タイマーから通知しません。最初の陽性画像から、新しい陽性画像で2000msの継続保持を確認すると通知します。観測間隔が2500msを超えると進捗をリセットします。`next_capture_after_ms`を待ち、さらに固定1秒を足さないでください。遅い通信・推論では継続判定が成立しない場合があり、実時間で正確に2秒後の通知は保証しません。通知後のクールダウンはなく、次の新しい陽性画像から新たな2秒間の確認を始めます。pause/endは撮影を即停止し、遅れて届く応答も破棄します。pause中もセッション期限は進みます。
 
 判定失敗はHTTP 200でも`state: unknown, notify: false`となります。HTTPエラーは`{error:{code,message},request_id}`です。401はトークン、403はOrigin、409は送信の重複、413はサイズを確認してください。503はWorkerの設定不足です。`X-Request-Id`で問い合わせできます。
 
