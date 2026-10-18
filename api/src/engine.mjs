@@ -8,6 +8,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   requiredHoldMs: 2000,
   cooldownMs: 0,
   maxSampleGapMs: 2500,
+  coreS3MaxSampleGapMs: 10_000,
   decisionTimeoutMs: 10_000,
   maxResultAgeMs: 10_000,
   retentionMs: 30 * 60_000,
@@ -195,7 +196,10 @@ export class FocusEngine {
       return this.snapshot(session, { reason: 'capture_too_soon' });
     }
     session.lastAcceptedAt = now;
-    if (session.lastSampleAt === null || now - session.lastSampleAt > this.settings.maxSampleGapMs) this.resetHold(session);
+    // CoreS3 uploads synchronously: inference, transport and capture all separate
+    // accepted samples. Keep its observed positives across that measured delay.
+    const maxSampleGapMs = session.deviceType === 'cores3' ? this.settings.coreS3MaxSampleGapMs : this.settings.maxSampleGapMs;
+    if (session.lastSampleAt === null || now - session.lastSampleAt > maxSampleGapMs) this.resetHold(session);
     const flight = { controller: new AbortController(), generation: session.generation };
     session.inFlight = flight;
     let timer;
