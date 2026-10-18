@@ -2,6 +2,15 @@
 
 Mac・Reachy Mini・CoreS3が同じREST APIを利用します。RESTは通信形式、Bearerは認証方式で、両方を組み合わせます。画面・撮影・音や動きの実装は各端末チームの担当です。レビュー用の詳細仕様は[API仕様書.md](./API仕様書.md)、機械可読な型は[openapi.yaml](./openapi.yaml)を参照してください。
 
+## メンバー向け共有先
+
+- API入口：https://focus-shared-api-20261018.take-otani.workers.dev/
+- レビュー用仕様書：https://focus-shared-api-20261018.take-otani.workers.dev/docs
+- OpenAPI：https://focus-shared-api-20261018.take-otani.workers.dev/openapi.json
+- 設定状態：https://focus-shared-api-20261018.take-otani.workers.dev/health
+
+これらのGETは認証不要です。`/`は利用可能なURLを返すJSON、`/docs`はMarkdown、`/openapi.json`はOpenAPI JSONです。API利用者にCloudflareのメンバー登録は不要です。`/v1/`呼び出し用の`FOCUS_API_TOKEN`は別経路で共有し、`OPENAI_API_KEY`はサーバー専用とします。`/health`の`configured`で設定状態を確認してください。
+
 ## 起動と配備
 
 リポジトリ直下で実行します。ローカル用の`cloudflare/.dev.vars`を作成し、実値はコミットしません。

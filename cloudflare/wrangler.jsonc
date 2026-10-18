@@ -5,6 +5,7 @@
   "compatibility_date": "2026-08-01",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
+  "rules": [{ "type": "Text", "globs": ["**/*.md", "**/*.yaml"], "fallthrough": true }],
   "durable_objects": {
     "bindings": [{ "name": "FOCUS_SESSIONS", "class_name": "FocusSession" }]
   },

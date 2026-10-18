@@ -3,6 +3,8 @@ import { FocusEngine } from '../../api/src/engine.mjs';
 import { createProvider } from '../../api/src/provider.mjs';
 import { readConfig } from '../../api/src/config.mjs';
 import { HttpError, DecisionError } from '../../api/src/errors.mjs';
+import apiSpec from '../API仕様書.md';
+import openApi from '../openapi.yaml';
 
 const fail = (status, code, message) => { throw new HttpError(status, code, message); };
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
@@ -57,6 +59,12 @@ export default {
         response = new Response(null, { status: 204, headers: { 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Frame-Id', 'Access-Control-Max-Age': '600', 'Cache-Control': 'no-store' } });
       } else if (request.method === 'GET' && pathname === '/health') {
         response = json({ provider: config?.provider || env.DECISION_PROVIDER || 'openai', configured: Boolean(config && env.FOCUS_SESSIONS && createProvider(config).configured) });
+      } else if (request.method === 'GET' && pathname === '/') {
+        response = json({ name: 'Focus 共通判定API', version: 'v1', base_url: new URL(request.url).origin, documentation: '/docs', openapi: '/openapi.json', health: '/health', authentication: 'Authorization: Bearer <FOCUS_API_TOKEN>' });
+      } else if (request.method === 'GET' && pathname === '/docs') {
+        response = new Response(apiSpec, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
+      } else if (request.method === 'GET' && pathname === '/openapi.json') {
+        response = new Response(openApi, { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
       } else {
         if (!(pathname === '/v1' || pathname.startsWith('/v1/'))) fail(404, 'not_found', 'エンドポイントが見つかりません。');
         if (!config || !env.FOCUS_SESSIONS) fail(503, 'service_not_configured', 'APIが設定されていません。');

@@ -4,6 +4,19 @@
 
 Mac・Reachy Mini Wireless・CoreS3は、自分で撮影した画像をこのAPIへ送ります。APIがスマホを手に持つ状態の判定、5秒間の継続保持、通知間隔、セッション状態を管理します。端末はAPIが返した`notify: true`を、自機のOS通知・音・動きに変換します。端末側に独自のしきい値を持たせません。
 
+## 公開仕様と共有
+
+認証不要のGETルート：
+
+| パス | 応答 | 共有URL |
+| --- | --- | --- |
+| `/` | API入口と仕様URLのJSON | https://focus-shared-api-20261018.take-otani.workers.dev/ |
+| `/docs` | このAPI仕様書（Markdown） | https://focus-shared-api-20261018.take-otani.workers.dev/docs |
+| `/openapi.json` | OpenAPI 3.1 JSON | https://focus-shared-api-20261018.take-otani.workers.dev/openapi.json |
+| `/health` | プロバイダーの設定状態 | https://focus-shared-api-20261018.take-otani.workers.dev/health |
+
+API利用者のCloudflareメンバー登録は不要です。`FOCUS_API_TOKEN`は別経路で共有し、`OPENAI_API_KEY`はサーバー専用です。ドキュメントの公開自体は`/v1/`の認証を変更しません。`/health`の`configured`で設定状態を確認します。
+
 ## 接続と認証
 
 - 開発時の標準URL：`http://127.0.0.1:8787`。公開環境はHTTPSを使用します。

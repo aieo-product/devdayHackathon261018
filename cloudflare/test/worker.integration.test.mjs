@@ -22,7 +22,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 test('Workers runtime: authenticated API, SQLite persistence, alerts and lifecycle', { timeout: 30000 }, async () => {
   const directory = await mkdtemp(join(tmpdir(), 'focus-worker-test-'));
   const bundle = join(directory, 'worker.mjs');
-  await build({ entryPoints: [fileURLToPath(new URL('../src/worker.mjs', import.meta.url))], outfile: bundle, bundle: true, format: 'esm', platform: 'neutral', external: ['node:*'] });
+  await build({ entryPoints: [fileURLToPath(new URL('../src/worker.mjs', import.meta.url))], outfile: bundle, bundle: true, format: 'esm', platform: 'neutral', external: ['node:*'], loader: { '.md': 'text', '.yaml': 'text' } });
   const options = { modules: true, script: await readFile(bundle, 'utf8'), compatibilityDate: '2026-08-01', compatibilityFlags: ['nodejs_compat'], durableObjects: { FOCUS_SESSIONS: { className: 'FocusSession', useSQLite: true } }, resourcePersistencePath: join(directory, 'storage'), bindings: { FOCUS_API_TOKEN: token, DECISION_PROVIDER: 'mock', MOCK_PHONE_PROBABILITY: '0.95', ALLOWED_ORIGINS: 'https://focus.example' } };
   let mf = new Miniflare(runtimeOptions(options));
   const call = async (path, { method = 'GET', body, headers = {}, authenticated = true } = {}) => {
@@ -38,6 +38,17 @@ test('Workers runtime: authenticated API, SQLite persistence, alerts and lifecyc
   const frame = (path, id, body = image) => call(`${path}/frames`, { method: 'POST', body, headers: { 'content-type': 'image/jpeg', 'x-frame-id': id } });
   try {
     assert.equal((await call('/health', { authenticated: false })).value.configured, true);
+    assert.equal((await call('/', { authenticated: false })).value.documentation, '/docs');
+    const docs = await mf.dispatchFetch('http://worker.test/docs');
+    assert.equal(docs.status, 200);
+    assert.match(docs.headers.get('content-type'), /text\/plain/);
+    const markdown = await docs.text();
+    assert.match(markdown, /共通判定API仕様書/);
+    assert.equal(markdown.includes(token), false);
+    const schema = (await call('/openapi.json', { authenticated: false })).value;
+    assert.match(schema.openapi, /^3\.1/);
+    assert.ok(schema.paths['/v1/sessions']);
+    assert.equal(JSON.stringify(schema).includes(token), false);
     const path = await create(60);
     for (const [endpoint, method] of [['/v1/sessions', 'POST'], [path, 'GET'], [`${path}/frames`, 'POST'], [`${path}/control`, 'POST']]) {
       assert.equal((await call(endpoint, { method, authenticated: false })).response.status, 401);
