@@ -1,0 +1,7 @@
+.env
+.env.*
+!.env.example
+node_modules/
+
+desktop-overlay/build/
+desktop-overlay/.swift-module-cache/

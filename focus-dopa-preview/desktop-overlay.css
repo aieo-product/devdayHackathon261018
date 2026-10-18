@@ -1,0 +1,10 @@
+:root { color-scheme: light; font-family: 'Hiragino Sans', sans-serif; }
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent !important; pointer-events: none; }
+.lyric-alarm-scene .lyric-alarm-atmosphere { background: radial-gradient(ellipse at center, #140b1c08 25%, #4b0a1c66 100%); }
+.lyric-alarm-scene .lyric-alarm-dots { width: min(88vw, 104vh); }
+.lyric-alarm-scene .lyric-alarm-heading { top: 4vh; }
+.lyric-alarm-scene .lyric-alarm-stage { top: 11vh; bottom: 12vh; }
+.lyric-alarm-scene .lyric-alarm-footer { display: none; }
+#desktop-message { position: fixed; z-index: 90; left: 50%; bottom: 4vh; transform: translateX(-50%); box-sizing: border-box; width: max-content; max-width: 82vw; padding: 13px 28px; border: 2px solid #ffcb51; border-radius: 18px; background: #1b1126ee; color: white; text-align: center; box-shadow: 0 5px 28px #0005; }
+#desktop-label { font-size: clamp(10px, 1vw, 18px); font-weight: 800; letter-spacing: .12em; color: #ffcb51; }
+#desktop-copy { margin: 5px 0 0; font-size: clamp(15px, 1.5vw, 28px); font-weight: 800; line-height: 1.45; overflow-wrap: anywhere; }

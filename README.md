@@ -108,6 +108,21 @@ npm run start:mac-check
 
 `http://127.0.0.1:3000` を開き、本人が開始・カメラ許可を選びます。実APIモードでは画像をOpenAIへ送信します。[APIキー不要のモック試験](docs/evaluation.md#ローカル再現追加のapi利用なしで確認する)、[公開APIの疎通手順](cloudflare/README.md)、[Events疎通手順](cloudflare-events/README.md)も利用できます。
 
+## DOTSフロントの起動とレビュー
+
+PCブラウザ向けの追加フロントを `focus-dopa-preview/` に用意しました。DOTS1体、動くトースト、警告音、全画面リリック、Chromeの小窓、macOS用のデスクトップ表示補助アプリを含みます。
+
+```sh
+npm run test:front
+npm run start:front
+```
+
+[音つき10シーンデモ](http://127.0.0.1:4327/?pattern=fever&character=green&showcase=1)で「音つきで一通り再生」を押すと、カメラ・実APIを使わず約33秒で確認できます。[通常画面](http://127.0.0.1:4327/?pattern=fever&character=green)で共有APIを使う場合は、[設定手順](focus-dopa-preview/README.md#共有apiを設定する)に従ってチームのトークンをローカルに設定してください。
+
+現行の共通APIは2秒保持・通知クールダウンなしです。[API仕様書](cloudflare/API仕様書.md)と[引き継ぎ文書](focus-dopa-preview/docs/HANDOFF.md)を参照してください。このフロントは `notify` と `next_capture_after_ms` に従い、保持時間や通知待機時間を独自に追加しません。
+
+実カメラの送信と `observing` 応答は確認済みですが、スマホの実物保持からの陽性通知は未確認です。詳細は [フロントREADME](focus-dopa-preview/README.md)、[引き継ぎとマージ手順](focus-dopa-preview/docs/HANDOFF.md)、[アセットの由来](focus-dopa-preview/ASSETS.md)に記載しています。
+
 ## データ・認証・制約
 
 - アプリケーションは生画像を永続保存しません。実判定ではCloudflare経由でOpenAIへ送信し、外部サービスの保持条件・料金は別途適用されます。
