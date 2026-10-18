@@ -8,7 +8,7 @@
 
 公開操作UI: [DOTS画面](https://focus-web-20261018.take-otani.workers.dev/) / [認証不要の表示デモ](https://focus-web-20261018.take-otani.workers.dev/?demo=1&pattern=fever&character=green)。実判定はチームコードでログインし、本人がカメラを有効化します。公開版のネイティブMac補助表示は非対応です。[公開Worker手順](../cloudflare-web/README.md)。
 
-通常の公式URLは `/`、演出確認は `?demo=1&pattern=fever&character=green` と分離しています。通常画面にはデモパネル・テストボタンを表示しません。`?showcase=1` はデモの互換用別名です。匿名デモの最終E2E確認は継続中です。
+通常の公式URLは `/`、演出確認は `?demo=1&pattern=fever&character=green` と分離しています。通常画面にはデモパネル・テストボタンを表示しません。`?showcase=1` はデモの互換用別名です。公開デモの表示検証は14項目通過しました。認証状態取得だけ匿名モックを使い、ログイン認証は別の実接続試験で確認しています。
 
 ## 現在の評価対象
 
@@ -54,7 +54,7 @@
 
 | 公開API・実推論・物理デバイス | 結果 | 入力・確認範囲 |
 | --- | --- | --- |
-| 公開DOTSの接続 | URL200、`/.env`・`/server.mjs`404、ログイン、healthのopenai/configured、セッション201 | 公開ブラウザ＋仮想カメラで7画像・実OpenAI通知2回、2秒以上の保持、pause/end/logout失効・モバイルを確認。匿名デモは最終確認中 |
+| 公開DOTSの接続 | URL200、`/.env`・`/server.mjs`404、ログイン、healthのopenai/configured、セッション201 | 公開ブラウザ＋仮想カメラで7画像・実OpenAI通知2回、2秒以上の保持、pause/end/logout失効・モバイルを確認。匿名デモの表示検証14項目も通過（認証状態のみ匿名モック） |
 | 公開Eventsの疎通 | `npm run smoke:events` **12項目通過** | 専用プロフィールの偽端末でOAuth・MCP・指示とACK・イベント履歴を確認。実カメラ・外部Webhook・dotsは使わない |
 | Macの2秒・繰り返し通知 | 同一セッションで2回、確認済み保持2534ms / 2386ms | Chrome仮想カメラ→公開Worker→実OpenAI。required_hold_ms 2000、クールダウン0。[PR #6](https://github.com/aieo-product/devdayHackathon261018/pull/6) |
 | 公開APIを通す遠隔UI E2E | **7項目通過**、通知ID2件がOAuth履歴と一致 | Chrome仮想カメラ＋実判定API＋公開Events Worker。許可確認→遠隔ON→2回検知→中継→遠隔OFF→適用確認・解除。[PR #10](https://github.com/aieo-product/devdayHackathon261018/pull/10) |
@@ -114,6 +114,9 @@ node scripts/smoke-test.mjs --expect-notify
 
 アプリケーションに生画像を永続保存する処理はありませんが、実APIモードではOpenAIへ送信し、外部サービスの保持条件は別途適用されます。判定APIは共有のデモBearerトークンで、利用者別分離はありません。EventsのOAuth読み取り・操作はsourceに分離しますが、管理用共通トークンはsourceを指定できるため信頼するアダプター専用です。
 
+
+公開デモの最終表示検証は14/14成功です。通常画面のデモ・テスト表示0、ログイン・カメラ・開始UIの維持、モバイル横はみ出し0、`?demo=1` の全10ステップ完走、ページエラー0、デモ実行によるAPI・カメラ呼び出し0、通常画面へ戻る操作、旧 `?showcase=1` を確認しました。この表示試験では `/api/access/status` だけ匿名モックを使っています。実ログイン・画像判定・停止・ログアウト失効は、前述の別の公開実接続試験で確認済みです。
+
 ## 未確認・今後の検証
 
 - DOTSフロントでの実物スマホ保持→陽性判定→通知、OSトースト実表示。タブ非表示でも有効なカメラは継続する設計で、非表示時に撮影を止めるMac確認UIとは異なります。
@@ -121,6 +124,6 @@ node scripts/smoke-test.mjs --expect-notify
 - 物理カメラを用いたMac遠隔操作、Reachyの現行2秒条件での再試験、ページ/Macを閉じた単独継続、CoreS3の実画像からビープまでの結合。
 - Reachy/CoreS3のEvents監視ON/OFFアダプター。既存の判定API接続とは別途実装が必要です。
 - 長時間稼働、認識精度・誤通知率・遅延分布、集中時間改善や継続利用の効果測定。
-- 公開操作UIは配備済みで、公開ブラウザ＋仮想カメラの判定・通知を確認。匿名デモの最終確認と物理カメラの再試験は未完了。チーム名、デモ動画、提出受付。[提出チェックリスト](submission.md)で確定します。
+- 公開操作UIは配備済みで、公開ブラウザ＋仮想カメラの判定・通知を確認。匿名デモの表示検証は完了。物理カメラの再試験は未完了。チーム名、デモ動画、提出受付。[提出チェックリスト](submission.md)で確定します。
 
 試験を追加した場合は、対象版、日時、入力が実物か仮想映像か、APIのモード、実際に確認した出力を記録し、この資料と[評価用JSON](evaluation.json)を更新してください。

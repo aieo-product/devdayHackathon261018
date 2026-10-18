@@ -84,7 +84,7 @@
       "evidence": [
         "cloudflare-web/README.md"
       ],
-      "anonymous_demo_qa": "in_progress"
+      "anonymous_demo_qa": "passed_14_display_checks_auth_status_mocked"
     }
   },
   "ai_integration": {
@@ -197,7 +197,7 @@
     },
     {
       "id": "public_cloudflare_frontend",
-      "status": "deployed_live_fake_camera_verified_anonymous_demo_qa_pending",
+      "status": "deployed_live_fake_camera_and_demo_display_verified",
       "public_url": "https://focus-web-20261018.take-otani.workers.dev/",
       "showcase_no_api_no_camera": true,
       "native_mac_helper_supported": false,
@@ -414,7 +414,24 @@
       "logout_revocation_verified": true,
       "mobile_verified": true,
       "physical_camera_used": false,
-      "anonymous_demo_full_e2e_verified": false
+      "anonymous_demo_display_e2e_verified": true,
+      "anonymous_demo_auth_status_mocked": true
+    },
+    {
+      "id": "public_demo_final_display_qa",
+      "passed": 14,
+      "failed": 0,
+      "normal_demo_test_elements_visible": 0,
+      "normal_login_camera_start_ui_preserved": true,
+      "mobile_horizontal_overflow": false,
+      "demo_steps_completed": 10,
+      "page_errors": 0,
+      "demo_triggered_api_calls": 0,
+      "camera_calls": 0,
+      "normal_return_verified": true,
+      "legacy_showcase_alias_verified": true,
+      "only_mocked_endpoint": "/api/access/status",
+      "authentication_evidence": "separate_previous_live_public_browser_test"
     }
   ],
   "judging_criteria": [
@@ -494,7 +511,7 @@
     "Image classification accuracy, real-world latency distributions and productivity benefits are not statistically measured.",
     "A physical two-second notification deadline is not guaranteed.",
     "DOTS frontend real phone holding to positive notification, OS toast display and long-running background behavior remain unverified; its mascot is separate from ChatGPT dots MCP integration.",
-    "Published frontend login and live inference were verified using fake camera input; anonymous demo mode final E2E and physical camera retest remain unverified."
+    "Published frontend login and live inference were verified using fake camera input; anonymous demo display verification passed with auth status mocked; physical camera retest remains unverified."
   ],
   "event": {
     "source_url": "https://luma.com/OpenAIDevDay2026CommunityHackathonTokyo",
