@@ -1,132 +1,99 @@
-# 集中支援アプリ — チーム引き継ぎ
+---
+title: Reachy Focus
+emoji: 🌱
+colorFrom: green
+colorTo: yellow
+sdk: static
+app_file: index.html
+pinned: false
+short_description: Standalone gentle smartphone-use reminders on Reachy Mini Wireless
+tags:
+  - reachy_mini
+  - reachy_mini_python_app
+---
 
-カメラで本人がスマホを手に持つ状態を検出し、5秒間続いたら、その端末の通知・音・動きで作業への復帰を促すアプリです。Reachy Mini Wireless、CoreS3、Macは、それぞれ自分のカメラと通知手段で動作します。判定には共通のクラウドAPIを使い、ガジェットの常時動作にMacを必要としない構成を目指します。
+# Reachy Focus — いまの作業へ、そっと戻ろう
 
-このリポジトリの引き継ぎ範囲は、共通API、JavaScript接続クライアント、CoreS3向け実装です。画面デザインとReachy実装は各担当が接続します。MCP対応は今回の必須条件に含めません。
+Reachy Mini Wirelessの本体カメラで、スマホを見たり操作したりする行動を観測し、短い日本語の声かけと任意の小さなアンテナ動作で気づきを促すPythonアプリです。開始後に操作ページとMacを閉じても、本体が撮影・判定要求・通知・タイマー終了を処理します。インターネット接続と利用者自身のOpenAI APIキーが必要です。
 
-## 4人の担当と結合点
+**現在の検証状況:** Python 39件・既存JavaScript 31件のテスト、wheel/sdist内容検査、公式CLIの一時環境インストール・アンインストール検証に成功しています（2026-10-18）。実APIによる認識精度とWireless実機での音声・動作・単体継続は、[実機チェックリスト](docs/reachy/validation.md)で結果を記録するまで未確認です。モックの成功を実機確認として扱いません。
 
-| 担当 | 作業 | 16:00までの結合点 |
-| --- | --- | --- |
-| Reachy担当 1名 | Wireless上の撮影・開始／停止・音や動作 | 自分でAPIへ画像を送信し、`notify: true`を自機で実行 |
-| フロント① | Macのカメラ取得・PCアプリからOSトースト通知 | `FocusClient.frame()`へ画像を渡し、新しい通知だけ実行 |
-| フロント② | セットアップ・セッション操作・状態表示 | 開始／停止をAPIにつなぎ、APIの状態をそのまま表示 |
-| 私：API＋CoreS3＋管理 | 共通判定・API配備・CoreS3・結合確認・提出 | 全員へAPI URLとデモ用トークンを渡し、全体デモを確認 |
+## すぐに使う
 
-**5秒間の継続保持・しきい値・通知間隔はAPIだけで判断します。** フロントやガジェットは判定ロジックを複製せず、応答の状態を表示し、`notify: true`のときにだけ端末のアクションを実行してください。ブラウザ内トーストだけではMacのOSトースト要件を満たしません。
+1. Reachy Mini Controlのアプリ一覧から `reachy_focus` をインストールして起動します。初回公開前は、下の開発インストールを使います。
+2. 操作画面を開きます。Wirelessでは `http://reachy-mini.local:8042` または `http://本体のIP:8042` です。
+3. OpenAI APIキーを保存し、開始前に「カメラを1枚確認」と「通知をテスト」を実行します。声の音量は本体で調整してください。
+4. 集中時間と通知方法を選び、画像送信の説明に同意して「集中を始める」を押します。
+5. 作業でスマホを使うときは一時停止します。再開・終了は同じ操作画面から行えます。Reachy Mini Controlからアプリ自体を停止することもできます。
 
-## 最新の共通仕様
+このアプリは集中度、意図、ADHDなどの診断を行いません。画角によって誤検知・見逃しがあります。スマホが置いてあるだけの場合と、見たり操作したりする場合を区別する条件で判定します。
 
-**スマホを手に持った状態が5秒続いたら、5秒到達後の新しい判定応答で直ちに注意します。** 見ていない・操作していない場合も、手に持っていれば対象です。机上にあるだけなら対象外です。旧「3秒間隔・3回連続」仕様より、この5秒仕様を優先します。全体の作業と進捗は[issue #1](https://github.com/aieo-product/devdayHackathon261018/issues/1)に集約します。
+## 単体モードのルール
 
-撮影の目安は1秒間隔です。最初の陽性画像の受理を0秒として、以降も陽性が続き、受理時刻の差が5秒以上になった画像応答で`notify: true`を返します。非検出・判定不能・停止、または観測間隔が2.5秒を超えた場合は0からやり直します。画像間の連続保持はサンプリングによる推定です。物理的に持った瞬間から正確に5.000秒で通知することは、撮影・通信・推論の遅延により保証できません。実APIの遅延は未計測です。
-
-画面は`continuous_hold_ms` / `required_hold_ms`の確認済み進捗を表示し、ローカルタイマーで通知を作りません。待機中やGETだけで進捗を増やさず、`notify: true`が返ったらすぐ自機の通知を実行します。
-
-## 最初に動かす
-
-Node.js **22.9以上**を使用します。このAPI・テストには外部npm依存がなく、`npm install`は不要です。
-
-```sh
-cp api/.env.example api/.env
-```
-
-`api/.env`に次を設定します。値は例なので、`FOCUS_API_TOKEN`はチーム用の値に変更してください。
-
-```dotenv
-FOCUS_API_TOKEN=replace-with-team-demo-token
-DECISION_PROVIDER=mock
-MOCK_PHONE_PROBABILITY=0.95
-MOCK_OBSERVABLE_PROBABILITY=1
-HOST=127.0.0.1
-PORT=8787
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
-```
-
-```sh
-npm test
-npm run start:api
-```
-
-別ターミナルから、同じトークンで接続確認します。
-
-```sh
-FOCUS_API_URL=http://127.0.0.1:8787 FOCUS_API_TOKEN=replace-with-team-demo-token npm run smoke -- --expect-notify
-```
-
-上の設定は**モック**です。画像内容に関係なく指定した確率を返し、通知・停止・接続の確認に使います。画像認識の実演や精度検証として扱わないでください。`/health`とセッション応答の`provider`でモックか実APIかを確認できます。
-
-実APIへ切り替える場合はサーバーの`api/.env`で`DECISION_PROVIDER=openai`と`OPENAI_API_KEY`を設定し、再起動します。実画像を送るスモークテストは明示的に許可します。
-
-```sh
-FOCUS_API_URL=https://your-api.example FOCUS_API_TOKEN=replace-with-team-demo-token npm run smoke -- --image /absolute/path/test.jpg --allow-live
-```
-
-`--expect-notify`は、通知が出ると期待する画像でだけ追加してください。実APIでは画像内容と判定により通知されない場合があります。OpenAIの実キー、実画像での認識、実機のカメラ・音・OS通知の動作確認は別途必要です。
-
-## 各担当へ渡すもの
-
-- **共通API担当 → 全員：** HTTPSのAPI URL、デモ用`FOCUS_API_TOKEN`、現在の`provider`、[HTTP契約](docs/api-contract.md)。公開Webからの接続先にはHTTPSを使用します。
-- **フロント担当：** [JavaScriptクライアント](clients/focus-client.mjs)を使い、セットアップ画面でAPI URLとデモ用トークンを入力。実際の値をソースや配布バンドルへ固定しません。
-- **CoreS3担当：** [CoreS3のREADME](devices/cores3/README.md)の機種・ライブラリ・カメラ設定に従います。Wi-Fiからバックエンドへ直接HTTP(S)通信し、公開先にはTLSとサーバー証明書の検証を使います。
-- **Reachy担当：** Wireless上の処理から同じHTTP契約へ直接接続。画像はJPEGで送信し、頭・アンテナ・音など実装済みの通知アクションを呼び出します。
-
-`OPENAI_API_KEY`は**APIサーバーだけ**に置きます。各端末に渡す`FOCUS_API_TOKEN`とは別物です。ブラウザに渡したデモ用トークンは利用者から見える値であり、サーバー秘密鍵のようには保護できません。本実装は共有トークンでのハッカソン用構成で、利用者ごとの認証・権限分離はありません。
-
-## Mac／画面担当の接続例
-
-```js
-import { FocusClient } from './clients/focus-client.mjs';
-
-const focus = new FocusClient({ baseUrl: apiUrl, token: demoToken });
-await focus.start({ deviceType: 'mac', durationSeconds: 1500 });
-
-// 呼び出し間隔には snapshot.next_capture_after_ms を使う。
-// jpegBlobは自分のカメラから取得する。撮影・OS通知は各担当の実装。
-const snapshot = await focus.frame(jpegBlob);
-if (snapshot !== null) {
-  renderState(snapshot);
-  if (focus.active && snapshot.notify) {
-    showOsToastOnce(snapshot.notification_id, snapshot.message);
-  }
-}
-```
-
-- `frame()`は一時停止中、古い結果、送信の重複などで`null`を返せます。その場合は通知しません。
-- `focus.snapshot`は表示用です。保存された`notify`を画面再描画や定期取得で再実行せず、**その場で返った新しいフレーム応答だけ**を通知に使います。`notification_id`でも重複を防ぎます。
-- `start()`・`pause()`・`resume()`・`end()`は`await`し、処理中は操作ボタンを無効にします。状態取得は`await focus.get()`、残り時間の表示は`focus.remainingMs`です。
-- 一時停止・終了の操作時点で撮影タイマーとカメラを止め、進行中のローカル画像取得を中止します。遅れて届いた結果は破棄します。`focus.active === false`の間も撮影しません。
-- APIは撮影もOS通知も行いません。セッション時間は開始時から経過し、一時停止しても終了予定時刻は延びません。
-
-## 16:00結合・17:00提出まで
-
-| 時刻（2026/10/18 JST） | 到達点 |
+| 項目 | 初期設定 |
 | --- | --- |
-| 14:17〜14:30 | 担当・HTTP契約を固定。API URL、認証、モック接続を全員で確認 |
-| 14:30〜15:00 | Mac／Reachy／CoreS3がそれぞれ撮影→API応答まで一往復 |
-| 15:00〜15:30 | 実APIで判定→自機通知。停止・判定不能・通知連打の確認 |
-| 15:30〜16:00 | 変更を結合し、公開環境と実機でデモを通す。CoreS3の追加機能は止める |
-| 16:00〜16:30 | 結合済みアプリの不具合修正と説明のブラッシュアップ |
-| 16:30〜16:45 | 公開URL、公開GitHub、README、デモの最終確認 |
-| 16:45〜17:00 | 提出操作と受付確認。**17:00提出完了**を目標 |
+| タイマー | 25分。一時停止中も終了時刻は変わりません |
+| 画像 | 長辺640px以下のJPEG。メモリ内だけで処理 |
+| 送信 | およそ3秒間隔。処理が遅い場合は完了後に間隔を空け、並列送信・待ち行列は作りません |
+| 通知条件 | 判断可能な画像でスマホ操作確率0.8以上が3回連続 |
+| リセット | 非検出、判定不能、通信失敗、設定変更、一時停止、終了、直前の有効判定から10秒以上 |
+| 再通知 | 通知後60秒は抑制し、解除後に新しい3回を数えます |
+| 通知 | 同梱の「いまの作業に、戻ろう。」。動作は初期設定で無効 |
+| 障害時 | 注意せず再試行。キー・権限・制限超過等を操作画面へ表示 |
 
-管理担当がCoreS3に使う最初の調査は30分を目安にします。撮影→API応答が通らない場合は詰まりを記録して管理に戻り、15:30以降は全体結合を優先します。未完成機種を完成済みと見せず、動作確認できた機種と未確認箇所を提出時に明記します。
+一時停止・終了・設定変更で古い結果を無効化します。送信済みのリクエストはOpenAI側で処理される場合がありますが、その結果で通知しません。ローカル確認画像も開始時に画面から取り除きます。表示する推定確率は実測の検知精度ではありません。
 
-## 結合時の確認
+## APIキー・画像・ログ
 
-- [ ] 全員が同じ公開APIへ接続でき、デモがモックか実APIかを説明できる。
-- [ ] スマホ保持が5秒未満なら通知せず、5秒到達後の応答で通知する。机上に置いただけの場合や撮影できない場合は誤通知しないことを実画像で確認する。
-- [ ] 通知後はクールダウンし、同じ通知を何度も実行しない。
-- [ ] 撮影中・API待ちのどちらで停止しても、撮影と後続通知が止まる。
-- [ ] Reachy／CoreS3はMacを中継せず動作し、Macは自分のOS通知を実行できる。
-- [ ] 公開URLと公開リポジトリを開け、APIキー・実トークンが公開ファイルに含まれない。
+キーは本体の `~/.config/reachy-focus/settings.json` に所有者のみ読み書きできる権限（0600）で保存します。`XDG_CONFIG_HOME` があればその下です。キーをGit、ブラウザのlocalStorage、URL、イベントログに保存・表示しません。「保存したキーを削除」で削除できます。
 
-APIは単一プロセスのメモリにセッションを保持するため、再起動でセッションが失われます。複数レプリカ間の共有、永続ログ、ユーザーごとのアカウント管理は未実装です。生画像をアプリ側のファイルに保存する処理はありませんが、実APIモードでは画像をOpenAIへ送信します。
+本人が開始したセッション中だけ、画像を本体から `https://api.openai.com/v1/decisions` へ送信します。開始前・一時停止中の「カメラを1枚確認」は明示操作によるローカル確認で、OpenAIへ送信しません。画像は自サービスで永続保存しません。イベントはメモリに当該セッションの最新500件まで保持し、新しいセッションまたはアプリ終了で消えます。OpenAI側の保持条件とAPI料金は別途適用されます。
 
-## 参照
+操作画面は信頼するLANで使う前提です。HTTPであり、ユーザー認証はありません。同一LANの人は設定変更やローカルカメラ確認を実行できるため、ポート8042をインターネットへ公開しないでください。異なるWebサイトからの操作はOrigin/専用ヘッダーで拒否します。APIキーの生値を読み出すAPIはありません。
 
-- [HTTP契約・応答・エラー一覧](docs/api-contract.md)
-- [APIの環境変数・配備手順](api/README.md)
-- [CoreS3の実機セットアップ](devices/cores3/README.md)
-- [OpenAI Decisions APIガイド](https://developers.openai.com/api/docs/guides/decisions)
-- [OpenAI Decisions APIリファレンス](https://developers.openai.com/api/reference/typescript/resources/decisions/methods/create)
+## 開発・検証
+
+公式の `reachy-mini-app-assistant` 1.12.0で作成したひな形をルートへ配置しています。Python 3.10以上、Reachy SDK 1.12系が対象です。実機上のSDK/デーモン互換性は導入時に確認してください。
+
+```sh
+uv venv --python 3.12
+uv pip install --python .venv/bin/python -e '.[dev]'
+.venv/bin/python -m pytest -q
+.venv/bin/ruff check src/reachy_focus tests/reachy
+.venv/bin/python -m build
+.venv/bin/python scripts/check-reachy-package.py
+.venv/bin/reachy-mini-app-assistant check .
+```
+
+デーモンが動くWireless本体上で、このリポジトリのルートをインストールします。Reachy Miniは同時に1つの本体アプリを実行します。
+
+```sh
+/venvs/apps_venv/bin/python -m pip install /path/to/devdayHackathon261018
+# 開発用に直接起動する場合（Controlからの起動と同時実行しない）
+/venvs/apps_venv/bin/python -m reachy_focus.main
+```
+
+SDKが接続済みの本体インスタンスをアプリへ渡します。独自のハードウェア接続やデーモン変更は行いません。モデル名の既定値は公式Decisionsガイドに合わせて `gpt-6-luna`。利用権限・応答は実キーで別途確認します。APIの接続先は固定し、キーが任意サーバーへ送られる設定は提供しません。
+
+## 共有リポジトリと直接公開
+
+```text
+README.md / pyproject.toml / index.html / style.css  # HF Spaceのルート
+src/reachy_focus/                                  # 配布するPythonパッケージ
+apps/mac/                                         # Mac担当用の置き場
+apps/cores3/                                      # 将来の独立置き場（既存実装はdevices/cores3）
+api/ / clients/ / devices/cores3/                   # 既存チーム実装
+tests/reachy/ / docs/reachy/                       # Reachy専用テスト・資料
+```
+
+GitHubとHF Spaceへ**同一コミット**をpushします。サブディレクトリの書き出しは不要です。HFには全ソースが公開されますが、wheel/sdistはReachyパッケージだけを含みます。他機器用の依存関係は各プロジェクト内で管理し、ReachyのPython依存に追加しません。
+
+重要: チーム共通APIには「スマホ保持5秒」の別ルールがあります。**今回のReachyは承認済みの直接Decisions接続・3回連続モードです。共通APIの `notify` を使いません。** 既存API・CoreS3の挙動を変更していません。統合する場合は判定クライアント境界とポリシーを明示的に変更してください。既存READMEは [共通APIチーム引き継ぎ](docs/shared-team-handoff.md) に保存しています。
+
+[直接公開の手順](docs/reachy/release.md) / [実機チェックリスト](docs/reachy/validation.md) / [Issue本文](docs/reachy/issue.md)
+
+## 公式資料
+
+- [Reachy Miniアプリの作成・配布](https://github.com/pollen-robotics/reachy_mini/blob/main/docs/source/SDK/apps.md)
+- [OpenAI Decisions API](https://developers.openai.com/api/docs/guides/decisions)
+- [元仕様書](https://focus-team-spec-20261018-a14d.donald-25.chatgpt.site/)

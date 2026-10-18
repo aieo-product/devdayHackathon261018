@@ -1,0 +1,22 @@
+name: Reachy Python app
+on:
+  push:
+  pull_request:
+jobs:
+  reachy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[dev]'
+      - run: python -m pytest -q
+      - run: ruff check src/reachy_focus tests/reachy
+      - run: python -m build
+      - run: python scripts/check-reachy-package.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check src/reachy_focus/static/main.js
+      - run: npm test
