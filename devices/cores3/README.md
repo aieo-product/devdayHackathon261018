@@ -48,13 +48,13 @@ OpenAI API キーはバックエンドだけに置きます。本体の `FOCUS_A
 | 再開 | 同上、`{"action":"resume"}` | HTTP 200、snapshot |
 | 終了 | 同上、`{"action":"end"}` | HTTP 200、snapshot |
 
-応答は `session_id`、`state`、`notify`、`notification_id`、`continuous_hold_ms`、`required_hold_ms`、`next_capture_after_ms`、`provider` 等を持つ **トップレベルの snapshot JSON** です。`snapshot` オブジェクトで包みません。保有時間の 2 フィールドは符号なし整数で、`required_hold_ms` は `2000` です。本体は型と必須値を検証します。固定 Content-Length / chunked のどちらにも対応し、応答は 4 KiB まで受け付けます。
+応答は `session_id`、`state`、`notify`、`notification_id`、`continuous_hold_ms`、`required_hold_ms`、`next_capture_after_ms`、`provider` 等を持つ **トップレベルの snapshot JSON** です。`snapshot` オブジェクトで包みません。保有時間の2フィールドは符号なし整数です。本体は型と必須値を検証し、`required_hold_ms` はAPIが返す正の値を受け入れます。固定5000msとして拒否しません。2026-10-18に公開Workerの画像なし開始/終了で `required_hold_ms: 2000`、`provider: "openai"` を実測しました。固定 Content-Length / chunked のどちらにも対応し、応答は 4 KiB まで受け付けます。
 
-判定対象は「スマホを手に持っている」状態です。操作や注視を伴わなくても対象となり、机に置かれたスマホは対象外です。API は 1 秒のサンプル間隔を指定し、最初の陽性を `0 ms` として、連続保有が 5 秒以上となる新しい陽性応答で直ちに `notify: true` を返します。確率閾値・連続保有時間・60 秒のクールダウンはサーバーが管理します。陰性・不明・判定エラー・一時停止・終了、または観測間隔が 2500 ms を超えた場合、連続保有時間はリセットされます。
+判定対象は「スマホを手に持っている」状態です。操作や注視を伴わなくても対象となり、机に置かれたスマホは対象外です。最初の陽性を `0 ms` として、APIが指定する保持時間を満たす新しい陽性応答で `notify: true` を返します。確率閾値・連続保有時間・通知間隔はサーバーが管理します。現在の公開Workerは保持2秒・クールダウンなしです。ローカルAPIなど設定が異なる場合も、本体は応答の `required_hold_ms` と `next_capture_after_ms` に従います。陰性・不明・判定エラー・一時停止・終了、または観測間隔が 2500 ms を超えた場合、連続保有時間はリセットされます。
 
-本体は成功応答の `next_capture_after_ms` だけ待って次の画像を送ります。`continuous_hold_ms` と `required_hold_ms` を `Hold 1.0 / 2.0 s (API)` のように表示し、本体側の時計で進捗を増やしたり、2 秒到達を判定したりしません。通信失敗時の再試行待ちだけ 3 秒を置きます。フレーム ID はセッション内の連番で、新しい画像ごとに増えます。
+本体は成功応答の `next_capture_after_ms` だけ待って次の画像を送ります。`continuous_hold_ms` と `required_hold_ms` を `Hold 1.0 / 2.0 s (API)` のように表示し、本体側の時計で進捗を増やしたり、通知時刻を判定したりしません。通信失敗時の再試行待ちだけ 3 秒を置きます。フレーム ID はセッション内の連番で、新しい画像ごとに増えます。
 
-実際に手に取った瞬間から正確に 5 秒での通知は保証できません。画像取得・通信・推論の遅延が加わります。推論等が遅く、API の観測間隔が 2500 ms を超えると進捗はリセットされるため、その環境ではスマホを持ち続けても通知まで進まない場合があります。実機デモ前に API 側の観測間隔を確認してください。
+実際に手に取った瞬間からAPI指定の保持時間ぴったりでの通知は保証できません。画像取得・通信・推論の遅延が加わります。推論等が遅く、API の観測間隔が 2500 ms を超えると進捗はリセットされるため、その環境ではスマホを持ち続けても通知まで進まない場合があります。実機デモ前に API 側の観測間隔を確認してください。
 
 `notify: true` かつ未処理の `notification_id` の場合だけ `PUT PHONE DOWN` と短い音を出します。`provider: "mock"` では `MOCK` を表示し、実画像による判定と区別します。通信失敗・不正 JSON・カメラ失敗は `UNKNOWN` で、スマホ検出として扱いません。
 
@@ -79,7 +79,7 @@ OpenAI API キーはバックエンドだけに置きます。本体の `FOCUS_A
 1. **未開始**：起動後 15 秒待ち、バックエンドに frames が届かないことを確認。
 2. **開始と形式**：`START` → sessions 作成 → JPEG の形式検証を通過した応答を確認。共通 API は画像の保存・プレビューを提供しません。大きさ・向き・明るさの目視確認が必要なら、別途 M5Stack の公式カメラ表示サンプル等を使い、本体でローカル確認してください。
 3. **mock 表示**：mock backend で `MOCK` を確認。通知 ID が同じ間はビープを繰り返さないことを確認。
-4. **判定と 5 秒進捗**：実判定 backend で、スマホなし・机上のスマホ・手に持ったスマホ・手元が見えない場面を確認。操作や注視をせず持つだけでも、API の `Hold 0.0 / 5.0 s` から進捗が増え、5 秒以上の陽性応答で直ちに警告・音が出ることを確認。途中で机に置く、手元を隠す、`STOP` する、観測間隔が 2500 ms を超える場合に進捗がリセットされることも確認。`UNKNOWN` をスマホ検出と区別。
+4. **判定とAPI指定の進捗**：実判定 backend で、スマホなし・机上のスマホ・手に持ったスマホ・手元が見えない場面を確認。操作や注視をせず持つだけでも、API の `Hold 0.0 / 2.0 s` から進捗が増え、API指定時間以上の陽性応答で直ちに警告・音が出ることを確認。途中で机に置く、手元を隠す、`STOP` する、観測間隔が 2500 ms を超える場合に進捗がリセットされることも確認。`UNKNOWN` をスマホ検出と区別。
 5. **通信中停止**：サーバー応答を遅らせ、待機中に `STOP`。その後に返った `notify: true` で警告・音が出ず、新しい frames が届かないことを確認。
 6. **再開・終了**：`START` で同じセッションを再開。`END` 確認後は新規撮影なし。次の `START` で新しい ID を確認。
 7. **障害**：Wi-Fi 切断・不正 token・不正 CA・サーバー停止をそれぞれ試し、`UNKNOWN` 等の失敗表示になり警告音が出ないことを確認。
@@ -89,9 +89,9 @@ OpenAI API キーはバックエンドだけに置きます。本体の `FOCUS_A
 
 2026-10-18、外部SSD上の既存環境が利用できなかったため、一時フォルダの独立したArduino環境で **コンパイル成功（exit 0）**。M5Stack core **3.3.8**、M5Unified **0.2.19**、M5GFX **0.2.26**、M5CoreS3 **1.0.1**、ArduinoJson **7.4.2** を使用しました。ボードは `m5stack:esp32:m5stack_cores3`、既定のUSB CDC有効・QSPI PSRAM有効・16MB flashです。グローバルArduino設定は変更していません。
 
-プログラム領域は **1,305,027 bytes / 3,145,728 bytes（41%）**、静的RAMは **68,520 bytes / 327,680 bytes（20%）**。画像取得やHTTP処理中のヒープ・PSRAM使用量は、この静的集計には含みません。USBのESP32-S3を識別して `/dev/cu.usbmodem101` へ書き込み成功（exit 0、書き込み内容のhash検証成功）。初回の未設定状態では `boot configured=0 camera=idle` と `CONFIG REQUIRED`、設定後の再ビルド・書き込みでは `boot configured=1 camera=idle` と `PAUSED` を確認しました。開始操作なしでは撮影/フレーム送信ログが出ません。明示的な `START` でWi-Fi接続を試し、`target_visible=0 scan_ok=1` と切断理由 `201`（Espressifの `WIFI_REASON_NO_AP_FOUND`）を確認しました。設定先が見えないためチャンネル・認証方式・RSSIは取得できていません。SSID/password文字列の前後空白・不可視の書式制御文字はありませんでした。
+プログラム領域は **1,306,431 bytes / 3,145,728 bytes（41%）**、静的RAMは **68,520 bytes / 327,680 bytes（20%）**。画像取得やHTTP処理中のヒープ・PSRAM使用量は、この静的集計には含みません。USBのESP32-S3を識別して `/dev/cu.usbmodem101` へ書き込み成功（exit 0、書き込み内容のhash検証成功）。初回の未設定状態では `boot configured=0 camera=idle` と `CONFIG REQUIRED`、設定後の再ビルド・書き込みでは `boot configured=1 camera=idle` と `PAUSED` を確認しました。開始操作なしでは撮影/フレーム送信ログが出ません。明示的な `START` でWi-Fi接続を試し、`target_visible=0 scan_ok=1` と切断理由 `201`（Espressifの `WIFI_REASON_NO_AP_FOUND`）を確認しました。設定先が見えないためチャンネル・認証方式・RSSIは取得できていません。SSID/password文字列の前後空白・不可視の書式制御文字はありませんでした。
 
-`STOP` → `END` の後は `ENDED / No active server session` を確認し、再接続・撮影・送信は始まりません。接続待ちの取消時に古いassociationを切断し、サーバーセッションがないSTOP/ENDでは新たなWi-Fi接続を始めないよう修正しています。カメラ・実機からのAPI接続・保持時間の進捗・ビープは未確認です。ログは画面描画や音の要求を表すもので、物理画面の目視・音の聴取は別途必要です。
+`STOP` → `END` の後は `ENDED / No active server session` を確認し、再接続・撮影・送信は始まりません。接続待ちの取消時に古いassociationを切断し、サーバーセッションがないSTOP/ENDでは新たなWi-Fi接続を始めないよう修正しています。カメラ・実機からのAPI接続・5秒進捗・ビープは未確認です。ログは画面描画や音の要求を表すもので、物理画面の目視・音の聴取は別途必要です。
 
 ESP32-S3のWi-Fiは [Espressif公式仕様](https://www.espressif.com/products/socs/esp32-s3) の2.4GHz（802.11 b/g/n）です。今回の記録から設定先が5GHz専用と断定はできません。2.4GHz側の正しいSSID・電波が端末から見えることを確認してから再試験してください。
 
@@ -108,3 +108,5 @@ arduino-cli compile --fqbn m5stack:esp32:m5stack_cores3 devices/cores3
 - [Espressif の frame2jpg API](https://github.com/espressif/esp32-camera/blob/master/conversions/include/img_converters.h)
 - [Espressif の HTTPS クライアント例](https://github.com/espressif/arduino-esp32/blob/master/libraries/HTTPClient/examples/BasicHttpsClient/BasicHttpsClient.ino)
 - [ArduinoJson 7.4.2](https://github.com/bblanchon/ArduinoJson/releases/tag/v7.4.2) / [v7 JsonDocument](https://arduinojson.org/v7/api/jsondocument/)
+
+2026-10-18追記：公開Worker用HTTPS設定（共有token・ISRG Root X1・ローカルHTTP無効）で再ビルドと4領域hash検証付き実機書き込みに成功。USB native reset後のwatchdog resetで `configured=1 camera=idle` / `PAUSED` を確認。保持時間を固定5000msとして拒否する検証を、API指定の正の範囲を受け入れる検証に修正しました。STARTは画像送信の明示許可不足として自動承認レビューに拒否され、撮影/実機API/通知は未検証。STOP/END後は `ENDED / No active server session` を確認しています。

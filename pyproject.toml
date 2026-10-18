@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "reachy_focus"
+version = "0.2.9"
+description = "Shared-API smartphone-use reminders for Reachy Mini Wireless"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "reachy-mini>=1.12.0,<1.13",
+    "httpx>=0.28,<1",
+    "Pillow>=10,<14",
+    "fastapi>=0.115,<1"
+]
+keywords = ["reachy-mini-app"]
+
+[project.entry-points."reachy_mini_apps"]
+reachy_focus = "reachy_focus.main:ReachyFocus"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["reachy_focus", "reachy_focus.*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+reachy_focus = ["static/*.html", "static/*.css", "static/*.js", "assets/*.wav"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "build>=1", "ruff>=0.11"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/reachy"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
