@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { FocusEngine } from '../src/engine.mjs';
 import { DecisionError } from '../src/errors.mjs';
 
-function harness({ decide, settings } = {}) {
+function harness({ decide, settings, deviceType = 'mac' } = {}) {
   let now = 0;
   let calls = 0;
   let result = { phoneProbability: 0.9, observableProbability: 1 };
   const provider = { name: 'mock', configured: true, async decide(args) { calls += 1; return decide ? decide(args) : result; } };
   const engine = new FocusEngine({ provider, clock: () => now, settings });
   const owner = 'owner';
-  const session = engine.create({ owner, deviceType: 'mac' });
+  const session = engine.create({ owner, deviceType });
   const frame = (frameId, sessionId = session.session_id) => engine.frame({ owner, sessionId, frameId, bytes: Buffer.from([255, 216, 255]), contentType: 'image/jpeg' });
   return { engine, owner, session, frame, advance(ms = 1000) { now += ms; }, result(value) { result = value; }, get calls() { return calls; } };
 }
@@ -191,6 +191,44 @@ test('2500ms sample gaps preserve holding; larger gaps and provider failures res
   h.result({ phoneProbability: 1, observableProbability: 1 });
   h.advance();
   assert.equal((await h.frame('after-error')).continuous_hold_ms, 0);
+});
+
+test('CoreS3 allows measured synchronous delays up to 10 seconds; other devices retain 2500ms', async () => {
+  for (const deviceType of ['cores3', 'mac', 'reachy_mini']) {
+    for (const gap of [6500, 10000, 10001]) {
+      const h = harness({ deviceType });
+      await h.frame('start');
+      h.advance(gap);
+      assert.equal(h.engine.get({ owner: h.owner, sessionId: h.session.session_id }).notify, false);
+      const result = await h.frame('next-positive');
+      const confirms = deviceType === 'cores3' && gap <= 10000;
+      assert.equal(result.notify, confirms, `${deviceType} gap ${gap}`);
+      assert.equal(result.continuous_hold_ms, confirms ? gap : 0);
+      assert.equal(result.required_hold_ms, 2000);
+    }
+  }
+});
+
+test('CoreS3 resets holding on negative, unknown, provider failure, pause and end', async () => {
+  for (const reset of ['negative', 'unknown', 'failure', 'pause', 'end']) {
+    const h = harness({ deviceType: 'cores3' });
+    await h.frame('start');
+    h.advance(6500);
+    if (reset === 'pause' || reset === 'end') {
+      h.engine.control({ owner: h.owner, sessionId: h.session.session_id, action: reset });
+      if (reset === 'pause') h.engine.control({ owner: h.owner, sessionId: h.session.session_id, action: 'resume' });
+    } else {
+      h.result({ phoneProbability: reset === 'negative' ? 0 : reset === 'failure' ? NaN : 1, observableProbability: reset === 'unknown' ? 0 : 1 });
+      const result = await h.frame('reset');
+      assert.equal(result.notify, false);
+      assert.equal(result.continuous_hold_ms, 0);
+      h.result({ phoneProbability: 1, observableProbability: 1 });
+      h.advance(6500);
+    }
+    const result = await h.frame('after-reset');
+    assert.equal(result.notify, false, reset);
+    assert.equal(result.continuous_hold_ms, 0, reset);
+  }
 });
 
 test('a negative or unobservable fresh result at the threshold never confirms an earlier positive', async () => {
