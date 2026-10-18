@@ -1,0 +1,18 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "focus-shared-api-20261018",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "rules": [{ "type": "Text", "globs": ["**/*.md", "**/*.yaml"], "fallthrough": true }],
+  "durable_objects": {
+    "bindings": [{ "name": "FOCUS_SESSIONS", "class_name": "FocusSession" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FocusSession"] }],
+  "vars": {
+    "DECISION_PROVIDER": "openai",
+    "ALLOWED_ORIGINS": "http://localhost:3000,http://localhost:5173"
+  },
+  "observability": { "enabled": false }
+}
