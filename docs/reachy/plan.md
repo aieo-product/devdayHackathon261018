@@ -1,7 +1,7 @@
 # Reachy Focus — current implementation scope
 
 2026-10-18の追加指示で、直接Decisions接続から共通API接続へ変更した。
-以前の3回連続モードは廃止。判定・5秒保持・クールダウンは共通APIだけが管理する。
+以前の3回連続モードは廃止。判定・保持時間・クールダウンは共通APIだけが管理する。現在の統合済みAPI既定値は保持2秒・クールダウン0秒。Reachyは固定時間を持たず、応答の`required_hold_ms`と`next_capture_after_ms`に従う。
 
 - Shared API: https://focus-shared-api-20261018.take-otani.workers.dev
 - Credentials: user-supplied FOCUS_API_TOKEN on the robot only; never commit it.

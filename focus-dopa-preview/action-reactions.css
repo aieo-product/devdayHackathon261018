@@ -1,0 +1,24 @@
+/* Short, cancellable action accents. The companion remains a single character. */
+.reaction-sticker {
+ position: fixed;
+ z-index: 55;
+ pointer-events: none;
+ white-space: nowrap;
+ border: 2px solid #efffd0;
+ border-radius: 14px 14px 14px 3px;
+ padding: 8px 15px;
+ color: #101826;
+ background: #c5fc29;
+ box-shadow: 5px 5px 0 #7b2ffc, 0 0 28px #c5fc2966;
+ font-family: Impact, 'Arial Black', sans-serif;
+ font-size: calc(clamp(20px, 2.6vw, 36px) * var(--reaction-scale, 1));
+ font-style: italic;
+ font-weight: 900;
+ line-height: 1;
+ letter-spacing: .025em;
+ will-change: transform, opacity;
+}
+.reaction-cyan { background: #43dcea; border-color: #d2faff; box-shadow: 5px 5px 0 #7a47df, 0 0 28px #43dcea66; }
+.reaction-pink { background: #ff55c8; border-color: #ffe5fc; box-shadow: 5px 5px 0 #783cff, 0 0 28px #ff55c866; font-size: clamp(17px, 1.9vw, 27px); }
+body[data-intensity=off] .reaction-sticker { display: none; }
+@media (prefers-reduced-motion: reduce) { .reaction-sticker { display: none; } }

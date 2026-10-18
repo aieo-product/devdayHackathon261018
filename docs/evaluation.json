@@ -1,0 +1,431 @@
+{
+  "schema_version": "1.3.0",
+  "document_type": "hackathon_evidence_summary",
+  "language": "ja",
+  "as_of": "2026-10-18",
+  "project": {
+    "name": "集中支援アプリ",
+    "summary": "カメラ画像からスマホ保持を判定し、継続保持を確認したら端末から作業への復帰を促すプロトタイプ",
+    "target_users": [
+      "勉強・デスクワーク中についスマホを手に取る人"
+    ],
+    "repository_url": "https://github.com/aieo-product/devdayHackathon261018",
+    "public_api_url": "https://focus-shared-api-20261018.take-otani.workers.dev/",
+    "public_api_docs_url": "https://focus-shared-api-20261018.take-otani.workers.dev/docs",
+    "openapi_url": "https://focus-shared-api-20261018.take-otani.workers.dev/openapi.json",
+    "public_interactive_ui_url": null,
+    "demo_video_url": null,
+    "submission_status": "receipt_unverified",
+    "public_mcp_url": "https://focus-events-20261018.take-otani.workers.dev/mcp",
+    "team_name": null,
+    "default_branch": "main",
+    "source_url": "https://github.com/aieo-product/devdayHackathon261018/tree/main"
+  },
+  "versions": {
+    "current_api": {
+      "required_hold_ms": 2000,
+      "cooldown_ms": 0,
+      "mac_camera_ui_in_repository": true,
+      "reachy_source_in_repository": true,
+      "evidence": [
+        "api/src/config.mjs",
+        "cloudflare/README.md",
+        "tools/mac-camera-check/README.md",
+        "src/reachy_focus/"
+      ],
+      "dots_frontend_in_repository": true
+    },
+    "events_deployment": {
+      "url": "https://focus-events-20261018.take-otani.workers.dev",
+      "version": "b185bad6-b1f4-468c-8ed4-1a539e24eb9f",
+      "status": "deployed",
+      "pull_request_url": "https://github.com/aieo-product/devdayHackathon261018/pull/10"
+    },
+    "verification_provenance": {
+      "execution": "automated_suites_rerun_during_main_integration; live_and_physical_results_from_implementation_owner_records",
+      "historical_reachy_hold_ms": 5000,
+      "historical_reachy_cooldown_ms": 60000,
+      "historical_reachy_proves_current_two_second_physical_test": false,
+      "local_runtime": {
+        "node": "26.8.2",
+        "npm": "11.19.1",
+        "platform": "macOS arm64",
+        "worker_dependency_resolution": "npm_ci_package_lock",
+        "miniflare": "5.20261012.1-beta",
+        "esbuild": "0.28.2",
+        "wrangler": "4.151.1",
+        "workerd": "1.20261012.1"
+      },
+      "reachy_python_rerun": false
+    },
+    "integration": {
+      "branch": "main",
+      "merged_source_commit": "df3c9ca336664d9bfe1ec0ee9240104d2c98c5cd",
+      "locally_tested_commit": "b349cc95fcf062c673a3fb08e4d73dea4c72071e",
+      "pull_requests": [
+        4,
+        5,
+        6,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "worker_events_retested_commit": "e13216439af2db6c09de1be784307fc00b064981",
+      "frontend_tested_commit": "9d0ba6563f1ea7a6b3ac16324f729028807989ea"
+    }
+  },
+  "ai_integration": {
+    "provider": "OpenAI",
+    "api": "Decisions API",
+    "endpoint": "https://api.openai.com/v1/decisions",
+    "model_in_source": "gpt-6-luna",
+    "predicates": [
+      "observable",
+      "phone_use"
+    ],
+    "source_path": "api/src/provider.mjs",
+    "phone_probability_threshold": 0.8,
+    "observable_probability_threshold": 0.7,
+    "max_observation_gap_ms": 2500,
+    "decision_owner": "common_api_engine",
+    "medical_diagnosis": false
+  },
+  "features": [
+    {
+      "id": "rest_session_lifecycle",
+      "status": "implemented_and_tested",
+      "evidence": [
+        "api/src/server.mjs",
+        "api/test/http.test.mjs",
+        "clients/focus-client.test.mjs"
+      ]
+    },
+    {
+      "id": "stop_and_duplicate_suppression",
+      "status": "implemented_and_tested",
+      "evidence": [
+        "api/src/engine.mjs",
+        "api/test/engine.test.mjs",
+        "clients/focus-client.test.mjs"
+      ]
+    },
+    {
+      "id": "worker_sqlite_persistence",
+      "status": "implemented_and_tested",
+      "evidence": [
+        "cloudflare/src/worker.mjs",
+        "cloudflare/test/worker.integration.test.mjs"
+      ]
+    },
+    {
+      "id": "mac_two_second_repeat_notification",
+      "status": "implemented_and_live_virtual_camera_verified",
+      "notification_outputs": [
+        "in_page_message",
+        "web_audio_beep"
+      ],
+      "os_notification_implemented": false,
+      "evidence": [
+        "tools/mac-camera-check/README.md",
+        "https://github.com/aieo-product/devdayHackathon261018/pull/6"
+      ]
+    },
+    {
+      "id": "cores3",
+      "status": "physical_image_upload_and_phone_detection_reported_notification_not_reached",
+      "evidence": [
+        "devices/cores3/README.md",
+        "devices/cores3/cores3.ino"
+      ]
+    },
+    {
+      "id": "reachy_mini",
+      "status": "implemented_historical_five_second_physical_e2e_verified",
+      "source_in_repository": true,
+      "current_two_second_physical_retest_verified": false,
+      "evidence": [
+        "src/reachy_focus/",
+        "docs/reachy/validation.md",
+        "docs/reachy/dance.md"
+      ],
+      "app_version": "0.3.0",
+      "dance_implemented": true,
+      "dance_physical_transition_verified": false
+    },
+    {
+      "id": "mcp_events_remote_control",
+      "status": "implemented_deployed_live_virtual_camera_e2e_verified",
+      "actual_dots_connection_verified": false,
+      "physical_camera_remote_control_verified": false,
+      "reachy_cores3_remote_adapters_implemented": false,
+      "evidence": [
+        "cloudflare-events/README.md",
+        "tools/mac-camera-check/README.md",
+        "https://github.com/aieo-product/devdayHackathon261018/pull/10"
+      ]
+    },
+    {
+      "id": "dots_frontend",
+      "status": "implemented_camera_upload_observing_reported_positive_notification_unverified",
+      "start_command": "npm run start:front",
+      "local_url": "http://127.0.0.1:4327",
+      "showcase_duration_seconds_approx": 33,
+      "showcase_scene_count": 10,
+      "showcase_uses_camera_or_api": false,
+      "chatgpt_dots_mcp_integration": false,
+      "os_notification_implemented": true,
+      "os_notification_display_verified": false,
+      "camera_continues_when_tab_hidden": true,
+      "evidence": [
+        "focus-dopa-preview/README.md",
+        "focus-dopa-preview/docs/HANDOFF.md",
+        "https://github.com/aieo-product/devdayHackathon261018/pull/12"
+      ]
+    }
+  ],
+  "verification": [
+    {
+      "id": "current_api_client_tests",
+      "command": "npm test",
+      "passed": 37,
+      "failed": 0,
+      "mode": "unit_and_mock",
+      "execution": "rerun_during_main_integration"
+    },
+    {
+      "id": "current_worker_tests",
+      "command": "npm run test:worker",
+      "passed": 1,
+      "failed": 0,
+      "mode": "local_runtime_sqlite",
+      "execution": "rerun_during_main_integration"
+    },
+    {
+      "id": "current_mac_tests",
+      "command": "npm run test:mac-check",
+      "passed": 51,
+      "failed": 0,
+      "parts": {
+        "proxy": 19,
+        "remote_controller": 32
+      },
+      "execution": "rerun_during_main_integration"
+    },
+    {
+      "id": "current_events_tests",
+      "command": "npm run test:events",
+      "passed": 68,
+      "failed": 0,
+      "parts": {
+        "oauth": 16,
+        "webhook": 12,
+        "broker": 17,
+        "devices": 16,
+        "miniflare_integration": 7
+      },
+      "execution": "rerun_during_main_integration"
+    },
+    {
+      "id": "current_frontend_tests",
+      "command": "npm run test:front",
+      "passed": 79,
+      "failed": 0,
+      "mode": "unit_and_mock",
+      "execution": "rerun_during_main_integration"
+    },
+    {
+      "id": "current_automated_total",
+      "passed": 236,
+      "failed": 0,
+      "includes": [
+        "current_api_client_tests",
+        "current_worker_tests",
+        "current_mac_tests",
+        "current_events_tests",
+        "current_frontend_tests"
+      ],
+      "includes_reachy_python_tests": false,
+      "execution": "rerun_during_main_integration"
+    },
+    {
+      "id": "live_events_smoke",
+      "command": "npm run smoke:events",
+      "passed": 12,
+      "failed": 0,
+      "mode": "public_events_worker_isolated_fake_device",
+      "uses_physical_camera": false,
+      "uses_real_openai_inference": false,
+      "uses_external_webhook": false,
+      "uses_dots": false
+    },
+    {
+      "id": "mock_pairing_browser",
+      "passed": 7,
+      "failed": 0,
+      "mode": "mock_chrome"
+    },
+    {
+      "id": "mock_remote_browser",
+      "passed": 10,
+      "failed": 0,
+      "mode": "mock_chrome",
+      "late_permission_expiry_seconds": 121,
+      "frames_after_expired_permission": 0
+    },
+    {
+      "id": "two_second_repeat_live",
+      "mode": "Chrome_virtual_camera_public_worker_real_OpenAI",
+      "frames": 6,
+      "notifications_same_session": 2,
+      "observed_hold_ms": [
+        2534,
+        2386
+      ],
+      "required_hold_ms": 2000,
+      "cooldown_ms": 0,
+      "uses_physical_camera": false,
+      "evidence": "https://github.com/aieo-product/devdayHackathon261018/pull/6"
+    },
+    {
+      "id": "live_remote_browser_e2e",
+      "passed": 7,
+      "failed": 0,
+      "mode": "Chrome_virtual_camera_real_detection_API_public_Events_Worker",
+      "notification_ids_matched_in_oauth_history": 2,
+      "event_data_field_count": 8,
+      "event_contains_images": false,
+      "frame_requests": 8,
+      "frame_responses": 7,
+      "inflight_frame_cancelled_on_off": true,
+      "all_virtual_camera_tracks_ended": true,
+      "off_acknowledged": true,
+      "page_errors": 0,
+      "mobile_horizontal_overflow": false,
+      "test_oauth_revoked": true,
+      "uses_physical_camera": false,
+      "actual_dots_connection_verified": false,
+      "evidence": [
+        "cloudflare-events/README.md",
+        "https://github.com/aieo-product/devdayHackathon261018/pull/10"
+      ]
+    },
+    {
+      "id": "historical_reachy_physical_e2e",
+      "mode": "physical_Reachy_camera_public_worker_real_OpenAI_physical_motion_audio",
+      "historical_required_hold_ms": 5000,
+      "historical_cooldown_ms": 60000,
+      "observed_hold_ms": 5313,
+      "notifications": 1,
+      "fear1_motion_human_confirmed": true,
+      "fear1_audio_human_confirmed": true,
+      "session_timer_completed": true,
+      "current_two_second_retest": false,
+      "evidence": "docs/reachy/validation.md"
+    },
+    {
+      "id": "reachy_030_python",
+      "command": "python -m pytest -q",
+      "passed": 47,
+      "failed": 0,
+      "execution": "implementation_owner_record_not_rerun_here",
+      "evidence": "https://github.com/aieo-product/devdayHackathon261018/pull/11"
+    },
+    {
+      "id": "cores3_physical_image_trial",
+      "execution": "implementation_owner_session_report_not_rerun_here",
+      "frames_sent": 5,
+      "phone_positive_results": 2,
+      "notifications": 0,
+      "hold_reset_reason": "observation_gap_exceeded_2500ms",
+      "capture_and_session_stopped": true,
+      "evidence": "devices/cores3/README.md"
+    }
+  ],
+  "judging_criteria": [
+    {
+      "name": "新機能の活用",
+      "claim": "Decisions APIの保持・可視性predicateとMCP Events・OAuth・署名配送を実装",
+      "evidence": [
+        "api/src/provider.mjs",
+        "https://github.com/aieo-product/devdayHackathon261018/issues/3",
+        "cloudflare-events/README.md"
+      ]
+    },
+    {
+      "name": "使いやすさ",
+      "claim": "開始・一時停止・終了と判定状況の可視化",
+      "evidence": [
+        "https://github.com/aieo-product/devdayHackathon261018/pull/6",
+        "clients/focus-client.test.mjs",
+        "tools/mac-camera-check/README.md"
+      ]
+    },
+    {
+      "name": "有用性",
+      "claim": "作業に戻るきっかけを本人へ提供する仮説",
+      "effectiveness_measured": false,
+      "evidence": [
+        "docs/demo.md"
+      ]
+    },
+    {
+      "name": "独創性",
+      "claim": "共通AI判断をPC・小型端末・ロボットの異なるフィードバックへ接続する設計",
+      "all_devices_e2e_verified": false,
+      "evidence": [
+        "devices/cores3/cores3.ino",
+        "https://github.com/aieo-product/devdayHackathon261018/issues/2",
+        "src/reachy_focus/",
+        "docs/reachy/validation.md",
+        "cloudflare-events/README.md"
+      ]
+    }
+  ],
+  "data_handling": {
+    "live_image_flow": [
+      "device",
+      "Cloudflare_Worker",
+      "OpenAI"
+    ],
+    "mac_demo_additional_hop": "localhost_proxy",
+    "raw_image_persistence_in_application": false,
+    "third_party_retention_guaranteed_absent": false,
+    "worker_state_storage": "SQLite_Durable_Objects",
+    "node_state_storage": "process_memory",
+    "openai_key_location": "server_only",
+    "application_authentication": "shared_demo_bearer_token",
+    "detection_api_user_isolation_implemented": false,
+    "events_oauth_source_isolation_implemented": true,
+    "events_adapter_authentication": "shared_admin_token_trusted_server_only",
+    "events_contain_images": false,
+    "events_worker_storage": "separate_SQLite_Durable_Object",
+    "local_event_queue_durable": false
+  },
+  "limitations": [
+    "Team name, public interactive UI URL, demo video and submission receipt are unconfirmed.",
+    "Actual dots account authorization, subscription, webhook delivery and notifications remain unverified.",
+    "Mac remote control was tested with virtual video, not a physical camera.",
+    "Reachy physical camera-to-motion/audio was verified under historical five-second settings; current two-second physical retest and standalone continuation are unverified.",
+    "CoreS3 physical image-to-inference-to-beep end-to-end verification remains incomplete.",
+    "Reachy and CoreS3 adapters for Events remote monitoring control are not implemented.",
+    "Image classification accuracy, real-world latency distributions and productivity benefits are not statistically measured.",
+    "A physical two-second notification deadline is not guaranteed.",
+    "DOTS frontend real phone holding to positive notification, OS toast display and long-running background behavior remain unverified; its mascot is separate from ChatGPT dots MCP integration."
+  ],
+  "event": {
+    "source_url": "https://luma.com/OpenAIDevDay2026CommunityHackathonTokyo",
+    "source_checked_on": "2026-10-18",
+    "public_web_artifact_required": true,
+    "official_preliminary_deadline_jst": "2026-10-18T17:15:00+09:00",
+    "team_submission_target_jst": "2026-10-18T17:00:00+09:00",
+    "presentation_duration_seconds": 180
+  },
+  "documents": [
+    "README.md",
+    "docs/evaluation.md",
+    "docs/submission.md",
+    "docs/demo.md"
+  ]
+}

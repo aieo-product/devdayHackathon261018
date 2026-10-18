@@ -91,7 +91,7 @@ OpenAI API キーはバックエンドだけに置きます。本体の `FOCUS_A
 
 プログラム領域は **1,306,431 bytes / 3,145,728 bytes（41%）**、静的RAMは **68,520 bytes / 327,680 bytes（20%）**。画像取得やHTTP処理中のヒープ・PSRAM使用量は、この静的集計には含みません。USBのESP32-S3を識別して `/dev/cu.usbmodem101` へ書き込み成功（exit 0、書き込み内容のhash検証成功）。初回の未設定状態では `boot configured=0 camera=idle` と `CONFIG REQUIRED`、設定後の再ビルド・書き込みでは `boot configured=1 camera=idle` と `PAUSED` を確認しました。開始操作なしでは撮影/フレーム送信ログが出ません。明示的な `START` でWi-Fi接続を試し、`target_visible=0 scan_ok=1` と切断理由 `201`（Espressifの `WIFI_REASON_NO_AP_FOUND`）を確認しました。設定先が見えないためチャンネル・認証方式・RSSIは取得できていません。SSID/password文字列の前後空白・不可視の書式制御文字はありませんでした。
 
-`STOP` → `END` の後は `ENDED / No active server session` を確認し、再接続・撮影・送信は始まりません。接続待ちの取消時に古いassociationを切断し、サーバーセッションがないSTOP/ENDでは新たなWi-Fi接続を始めないよう修正しています。カメラ・実機からのAPI接続・5秒進捗・ビープは未確認です。ログは画面描画や音の要求を表すもので、物理画面の目視・音の聴取は別途必要です。
+`STOP` → `END` の後は `ENDED / No active server session` を確認し、再接続・撮影・送信は始まりません。接続待ちの取消時に古いassociationを切断し、サーバーセッションがないSTOP/ENDでは新たなWi-Fi接続を始めないよう修正しています。カメラ・実機からのAPI接続・API指定の保持時間に応じた進捗・ビープは未確認です。現在の統合済みAPI既定値は保持2秒・クールダウン0秒です。ログは画面描画や音の要求を表すもので、物理画面の目視・音の聴取は別途必要です。
 
 ESP32-S3のWi-Fiは [Espressif公式仕様](https://www.espressif.com/products/socs/esp32-s3) の2.4GHz（802.11 b/g/n）です。今回の記録から設定先が5GHz専用と断定はできません。2.4GHz側の正しいSSID・電波が端末から見えることを確認してから再試験してください。
 
@@ -109,4 +109,13 @@ arduino-cli compile --fqbn m5stack:esp32:m5stack_cores3 devices/cores3
 - [Espressif の HTTPS クライアント例](https://github.com/espressif/arduino-esp32/blob/master/libraries/HTTPClient/examples/BasicHttpsClient/BasicHttpsClient.ino)
 - [ArduinoJson 7.4.2](https://github.com/bblanchon/ArduinoJson/releases/tag/v7.4.2) / [v7 JsonDocument](https://arduinojson.org/v7/api/jsondocument/)
 
-2026-10-18追記：公開Worker用HTTPS設定（共有token・ISRG Root X1・ローカルHTTP無効）で再ビルドと4領域hash検証付き実機書き込みに成功。USB native reset後のwatchdog resetで `configured=1 camera=idle` / `PAUSED` を確認。保持時間を固定5000msとして拒否する検証を、API指定の正の範囲を受け入れる検証に修正しました。STARTは画像送信の明示許可不足として自動承認レビューに拒否され、撮影/実機API/通知は未検証。STOP/END後は `ENDED / No active server session` を確認しています。
+2026-10-18の初期接続試験の追記（後続結果は次項）：公開Worker用HTTPS設定（共有token・ISRG Root X1・ローカルHTTP無効）で再ビルドと4領域hash検証付き実機書き込みに成功。USB native reset後のwatchdog resetで `configured=1 camera=idle` / `PAUSED` を確認。保持時間を固定5000msとして拒否する検証を、API指定の正の範囲を受け入れる検証に修正しました。STARTは画像送信の明示許可不足として自動承認レビューに拒否され、撮影/実機API/通知は未検証。STOP/END後は `ENDED / No active server session` を確認しています。
+
+
+## 実画像試験の担当報告（2026-10-18）
+
+上記の初期接続試験の後、担当チャット「DevDayCommunityHackathon261018」から、本体の実画像5枚を公開APIへ送信し、スマホ保持を2回検出した報告がありました。通信間隔が2500msを超えて継続保持がリセットし、通知は発生しませんでした。撮影とAPIセッションは試験終了後に停止済みです。
+
+HTTPS接続をフレーム間で再利用する改善はコミット`964b566f184a36dead672079c8661721c3868e3d`に含まれます。ここに記載した実機結果は担当報告であり、資料更新時の再試験ではありません。本体からの画像送信と認識、継続保持による通知、実機ビープの聴取は分けて扱います。通知・ビープは引き続き未達です。
+
+観測間隔の許容を8秒へ広げる案は提案段階です。統合済みAPIの上限は2500msで、変更済みとして扱いません。

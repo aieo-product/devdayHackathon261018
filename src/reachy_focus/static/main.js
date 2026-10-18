@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 const states = {idle:'準備できました',starting:'APIへ接続中',resuming:'再開処理中',running:'集中中',paused:'一時停止中',ended:'終了',completed:'おつかれさまでした'};
-const labels = {api_failed:'共通APIへの接続失敗',remote_end_failed:'サーバー終了要求に失敗（本体は停止済み）',session_started:'集中を開始',session_paused:'一時停止',session_resumed:'集中を再開',session_ended:'終了',session_completed:'時間になりました',phone_detected:'スマホ操作の連続検出',action_executed:'通知アクション',notification_test:'通知テスト',settings_changed:'設定を更新',observation_failed:'判定をスキップ',action_failed:'通知に失敗',action_cancel_failed:'通知停止の確認が必要'};
+const labels = {focus_motion:'集中中のダンス',dance_interrupted:'スマホ保持でダンスを中断',phone_put_down:'スマホを置いた反応',api_failed:'共通APIへの接続失敗',remote_end_failed:'サーバー終了要求に失敗（本体は停止済み）',session_started:'集中を開始',session_paused:'一時停止',session_resumed:'集中を再開',session_ended:'終了',session_completed:'時間になりました',phone_detected:'スマホ操作の連続検出',action_executed:'通知アクション',notification_test:'通知テスト',settings_changed:'設定を更新',observation_failed:'判定をスキップ',action_failed:'通知に失敗',action_cancel_failed:'通知停止の確認が必要'};
 const reasons = {insufficient_visibility:'手元が十分に見えません',decision_timeout:'画像判定がタイムアウトしました',provider_error:'共通APIの判定処理でエラー',invalid_decision:'判定結果を確認できません',decision_refused:'画像判定が保留されました',stale_result:'古い判定結果を破棄しました',unauthorized:'共通APIトークンを確認してください',service_not_configured:'共通APIの設定待ち',session_not_found:'セッションが失効しました。終了して再度開始してください',frame_limit:'画像数上限です。終了して再度開始してください',unobservable:'手元が見えないため判定を保留',refusal:'判定を保留',authentication:'APIキーを確認してください',permission:'Decisions APIの利用権限を確認してください',rate_limited:'API制限のため待機',timeout:'通信タイムアウト',connection:'接続待ち',invalid_response:'判定応答を確認できません',api_error:'APIエラー',capture_or_action_failed:'カメラまたは通知を確認してください'};
 let initialized=false, pending=false, latest=null, imageUrl=null, connectionFailed=false;
 async function api(path, body) {
@@ -25,7 +25,7 @@ function render(s){
   $('test').disabled=pending||s.state==='running';
   $('audio').disabled=!s.capabilities.actions.includes('reminder');
   $('key-status').textContent=s.settings.api_token_configured?'（保存済み）':'（未設定）';
-  $('capabilities').textContent=`😨 Fear: ${s.capabilities.actions.includes('fear1')?'利用可能':'未ロード'} · カメラ: ${s.capabilities.camera?'利用可能':'未接続'} · 声かけ: ${s.capabilities.actions.includes('reminder')?'利用可能':'未接続'}`;
+  $('capabilities').textContent=`ダンス: ${s.capabilities.actions.includes('dance1')?'利用可能':'未ロード'} · 😨 Fear: ${s.capabilities.actions.includes('fear1')?'利用可能':'未ロード'} · カメラ: ${s.capabilities.camera?'利用可能':'未接続'} · 声かけ: ${s.capabilities.actions.includes('reminder')?'利用可能':'未接続'}`;
   if(!initialized){$('api-url').value=s.settings.api_url;$('minutes').value=s.settings.duration_minutes;$('audio').checked=s.settings.audio_enabled;initialized=true;}
   $('events').replaceChildren(...s.events.slice(-30).reverse().map(e=>{const li=document.createElement('li');li.textContent=new Date(e.time*1000).toLocaleTimeString()+' '+(labels[e.event]||e.event)+(e.reason?' · '+(reasons[e.reason]||e.reason):'')+(e.actions?' · '+e.actions.map(a=>a.action+': '+a.status).join(', '):'');return li;}));
   if(s.state==='running')clearPreview();

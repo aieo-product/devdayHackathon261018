@@ -158,7 +158,7 @@ bool ensureNetwork(const Command& command) {
       if (WiFi.SSID(i) == FocusConfig::WIFI_SSID &&
           (match < 0 || WiFi.RSSI(i) > WiFi.RSSI(match))) match = i;
     }
-    Serial.printf("[focus] wifi target_visible=%d scan_ok=%d", match >= 0, networks >= 0);
+    Serial.printf("[focus] wifi scan_count=%d target_visible=%d", networks, match >= 0);
     if (match >= 0)
       Serial.printf(" channel=%ld auth=%d rssi=%ld", static_cast<long>(WiFi.channel(match)),
                     static_cast<int>(WiFi.encryptionType(match)), static_cast<long>(WiFi.RSSI(match)));
@@ -234,6 +234,10 @@ bool parseSnapshot(const String& body, Snapshot& result) {
   if (result.requiredHoldMs == 0 || result.requiredHoldMs > 86400000UL) return false;
   // millis() comparisons require a delay below half its uint32_t range.
   if (result.nextCaptureMs > 86400000UL) return false;
+  Serial.printf("[focus] decision reason=%.40s phone=%.3f observable=%.3f\n",
+                doc["reason"] | "unspecified",
+                doc["phone_probability"].isNull() ? -1.0 : doc["phone_probability"].as<double>(),
+                doc["observable_probability"].isNull() ? -1.0 : doc["observable_probability"].as<double>());
   return !result.notify || !result.notificationId.isEmpty();
 }
 
@@ -246,9 +250,17 @@ bool request(const Command& command, const String& path, const char* contentType
     error = "Wi-Fi disconnected";
     return false;
   }
-  NetworkClientSecure secure;
-  NetworkClient plain;
-  HTTPClient http;
+  // Only the network worker uses these clients. Keep verified TLS alive between frames.
+  static NetworkClientSecure secure;
+  static NetworkClient plain;
+  static HTTPClient http;
+  auto closeTransport = [&]() {
+    http.setReuse(false);
+    http.end();
+    secure.stop();
+    plain.stop();
+  };
+  http.setReuse(command.intent == Intent::Run);
   String url = String(FocusConfig::API_BASE_URL) + path;
   bool began = false;
   if (url.startsWith("https://")) {
@@ -260,6 +272,7 @@ bool request(const Command& command, const String& path, const char* contentType
   }
   if (!began) {
     error = "URL / TLS setup failed";
+    closeTransport();
     return false;
   }
   http.setConnectTimeout(HTTP_TIMEOUT_MS);
@@ -270,30 +283,42 @@ bool request(const Command& command, const String& path, const char* contentType
   http.addHeader("Accept", "application/json");
   if (!frameId.isEmpty()) http.addHeader("X-Frame-Id", frameId);
   if (!isCurrent(command)) {
-    http.end();
+    closeTransport();
     return false;
   }
+  bool reused = http.connected();
+  uint32_t requestStarted = millis();
+  auto reportTransport = [&]() {
+    Serial.printf("[focus] http elapsed_ms=%lu reused=%d heap=%u min_heap=%u\n",
+                  static_cast<unsigned long>(millis() - requestStarted), reused,
+                  ESP.getFreeHeap(), ESP.getMinFreeHeap());
+  };
   int code = http.POST(bytes, length);
   Serial.printf("[focus] request kind=%s status=%d bytes=%u\n",
                 frameId.isEmpty() ? "session/control" : "frame", code,
                 static_cast<unsigned>(length));
   if (code != expectedStatus) {
     error = code < 0 ? "Network / TLS request failed" : String("HTTP ") + code;
-    http.end();
+    reportTransport();
+    closeTransport();
     return false;
   }
   // Bound both fixed-length and chunked JSON responses.
   int responseSize = http.getSize();
   if (responseSize > static_cast<int>(MAX_RESPONSE_BYTES)) {
     error = "Unexpected response length";
-    http.end();
+    reportTransport();
+    closeTransport();
     return false;
   }
   ResponseBuffer response;
   int received = http.writeToStream(&response);
-  http.end();
+  if (isCurrent(command)) http.end();
+  else closeTransport(); // Still parse a stale creation ID so pending END can retire it.
+  reportTransport();
   if (received <= 0 || response.overflow || !parseSnapshot(response.body, snapshot)) {
     error = "Invalid API snapshot";
+    closeTransport();
     return false;
   }
   return true;
@@ -354,6 +379,8 @@ void showSnapshot(const Command& command, const Snapshot& snapshot, String& last
                 static_cast<unsigned long>(snapshot.continuousHoldMs),
                 static_cast<unsigned long>(snapshot.requiredHoldMs), snapshot.notify,
                 snapshot.mock ? "mock" : "openai");
+  if (snapshot.notify)
+    Serial.printf("[focus] notification id=%s\n", snapshot.notificationId.c_str());
   if (snapshot.state == "ended") {
     finishLocally(command);
     publish(command, "ENDED", "Press START for a new session", snapshot.mock);
