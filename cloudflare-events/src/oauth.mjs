@@ -20,13 +20,16 @@ class OAuthError extends Error {
 }
 
 const invalid = (description = 'Invalid request.') => new OAuthError('invalid_request', description);
-const headers = (type = 'application/json; charset=utf-8') => ({
+// Only consent HTML receives an already validated callback. Native form POSTs
+// need same-origin referrers to retain Origin, and CSP must allow the callback
+// redirect. JSON and redirects keep no-referrer so OAuth parameters do not leak.
+const headers = (type = 'application/json; charset=utf-8', consentRedirect = null) => ({
   'content-type': type,
   'cache-control': 'no-store',
   pragma: 'no-cache',
   'x-content-type-options': 'nosniff',
-  'referrer-policy': 'no-referrer',
-  'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+  'referrer-policy': consentRedirect ? 'same-origin' : 'no-referrer',
+  'content-security-policy': `default-src 'none'; style-src 'unsafe-inline'; form-action 'self'${consentRedirect ? ` ${consentRedirect}` : ''}; frame-ancestors 'none'; base-uri 'none'`,
   'x-frame-options': 'DENY',
 });
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: headers() });
@@ -258,7 +261,7 @@ export class OAuthService {
       challenge: data.get('code_challenge'), resource: this.resource, scope: SCOPES.filter(scope => requested.includes(scope)).join(' '),
       expiresAt: this.clock() + 10 * MINUTE });
     const permissions = SCOPES.filter(scope => requested.includes(scope));
-    return new Response(`<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Focus Events を接続</title><style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:10vh auto;padding:1.5rem;line-height:1.7;color:#17231f;background:#f7f8f5}input,button{font:inherit;padding:.8rem;box-sizing:border-box;width:100%;margin:.5rem 0}button{background:#145b46;color:white;border:0;border-radius:.5rem}small{color:#52615a}</style><h1>Focus Events を接続</h1><p>Mac確認UIで発行した接続コードを入力してください。次の権限を許可します。</p><ul>${permissions.map(scope => `<li>${escape(SCOPE_DESCRIPTIONS[scope])}</li>`).join('')}</ul><p><small>許可する権限: ${escape(permissions.join(', '))}</small></p><form action="/oauth/authorize" method="post"><input type="hidden" name="nonce" value="${escape(nonce)}"><label for="pairing">接続コード</label><input id="pairing" name="pairing_code" type="password" autocomplete="off" spellcheck="false" required maxlength="64" placeholder="PAIR-…"><button type="submit">接続を許可</button></form><small>コードは10分間有効で、一度だけ利用できます。カメラ画像はこの接続画面には送信されません。</small></html>`, { headers: headers('text/html; charset=utf-8') });
+    return new Response(`<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Focus Events を接続</title><style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:10vh auto;padding:1.5rem;line-height:1.7;color:#17231f;background:#f7f8f5}input,button{font:inherit;padding:.8rem;box-sizing:border-box;width:100%;margin:.5rem 0}button{background:#145b46;color:white;border:0;border-radius:.5rem}small{color:#52615a}</style><h1>Focus Events を接続</h1><p>Mac確認UIで発行した接続コードを入力してください。次の権限を許可します。</p><ul>${permissions.map(scope => `<li>${escape(SCOPE_DESCRIPTIONS[scope])}</li>`).join('')}</ul><p><small>許可する権限: ${escape(permissions.join(', '))}</small></p><form action="/oauth/authorize" method="post"><input type="hidden" name="nonce" value="${escape(nonce)}"><label for="pairing">接続コード</label><input id="pairing" name="pairing_code" type="password" autocomplete="off" spellcheck="false" required maxlength="64" placeholder="PAIR-…"><button type="submit">接続を許可</button></form><small>コードは10分間有効で、一度だけ利用できます。カメラ画像はこの接続画面には送信されません。</small></html>`, { headers: headers('text/html; charset=utf-8', data.get('redirect_uri')) });
   }
 
   async authorize(request) {

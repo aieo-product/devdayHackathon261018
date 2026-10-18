@@ -127,7 +127,7 @@ test('form nonce requires same Origin, binds authorization, and permits only one
   const pairing = await ctx.service.createPairing('mac-source-a');
   const { nonce, response } = await ctx.page(client.client_id);
   assert.match(response.headers.get('content-security-policy'), /frame-ancestors 'none'/);
-  assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
+  assert.equal(response.headers.get('referrer-policy'), 'same-origin');
   assert.equal((await ctx.form('/oauth/authorize', { nonce, pairing_code: pairing.code }, 'https://attacker.example')).status, 400);
   assert.equal((await ctx.form('/oauth/authorize', { nonce, pairing_code: 'wrong-code' }, ORIGIN)).status, 400);
   assert.equal((await ctx.form('/oauth/authorize', { nonce, pairing_code: pairing.code }, ORIGIN)).status, 400);
@@ -135,6 +135,34 @@ test('form nonce requires same Origin, binds authorization, and permits only one
   assert.equal((await ctx.form('/oauth/authorize', { nonce: fresh.nonce, pairing_code: pairing.code }, ORIGIN)).status, 303);
   const replay = await ctx.page(client.client_id);
   assert.equal((await ctx.form('/oauth/authorize', { nonce: replay.nonce, pairing_code: pairing.code }, ORIGIN)).status, 400);
+});
+
+test('browser consent preserves its Origin, restricts callback navigation, and rejects opaque origins', async () => {
+  for (const redirectUri of [REDIRECT, 'https://chatgpt.com/connector/oauth/callback_123']) {
+    const ctx = setup();
+    const { data: client } = await ctx.register({ redirect_uris: [redirectUri] });
+    const pairing = await ctx.service.createPairing('mac-source-a');
+    const { nonce, response } = await ctx.page(client.client_id, { redirect_uri: redirectUri });
+    // no-referrer makes native browser form POSTs send Origin: null.
+    assert.equal(response.headers.get('referrer-policy'), 'same-origin');
+    const directives = response.headers.get('content-security-policy').split(';').map(value => value.trim());
+    assert.ok(directives.includes(`form-action 'self' ${redirectUri}`));
+    assert.ok(directives.includes("frame-ancestors 'none'"));
+    assert.ok(directives.includes("base-uri 'none'"));
+    for (const origin of [undefined, 'null', 'https://attacker.example']) {
+      const rejected = await ctx.form('/oauth/authorize', { nonce, pairing_code: pairing.code }, origin);
+      assert.equal(rejected.status, 400);
+      assert.equal((await rejected.json()).error_description, 'Authorization form origin does not match.');
+    }
+    const accepted = await ctx.form('/oauth/authorize', { nonce, pairing_code: pairing.code }, ORIGIN);
+    assert.equal(accepted.status, 303);
+    assert.equal(accepted.headers.get('referrer-policy'), 'no-referrer', 'suppress OAuth parameters on the callback redirect');
+    const destination = new URL(accepted.headers.get('location'));
+    assert.equal(`${destination.origin}${destination.pathname}`, redirectUri);
+    const token = await ctx.exchange(client.client_id, destination.searchParams.get('code'), { redirect_uri: redirectUri });
+    assert.equal(token.status, 200);
+    assert.equal(token.headers.get('referrer-policy'), 'no-referrer');
+  }
 });
 
 test('authorization codes are single-use and incorrect PKCE consumes the code', async () => {
