@@ -2,10 +2,21 @@
   "name": "focus-hackathon",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.9" },
+  "engines": {
+    "node": ">=22.9"
+  },
   "scripts": {
     "start:api": "node --env-file-if-exists=api/.env api/src/index.mjs",
     "test": "node --test api/test/*.test.mjs clients/*.test.mjs",
-    "smoke": "node --env-file-if-exists=api/.env scripts/smoke-test.mjs"
+    "smoke": "node --env-file-if-exists=api/.env scripts/smoke-test.mjs",
+    "start:worker": "wrangler dev -c cloudflare/wrangler.jsonc",
+    "deploy:worker": "wrangler deploy -c cloudflare/wrangler.jsonc",
+    "check:worker": "wrangler deploy --dry-run -c cloudflare/wrangler.jsonc",
+    "test:worker": "node --test cloudflare/test/*.test.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "miniflare": "5.20261012.1-beta",
+    "wrangler": "4.151.1"
   }
 }
