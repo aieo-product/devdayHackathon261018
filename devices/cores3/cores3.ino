@@ -252,6 +252,9 @@ bool request(const Command& command, const String& path, const char* contentType
     return false;
   }
   int code = http.POST(bytes, length);
+  Serial.printf("[focus] request kind=%s status=%d bytes=%u\n",
+                frameId.isEmpty() ? "session/control" : "frame", code,
+                static_cast<unsigned>(length));
   if (code != expectedStatus) {
     error = code < 0 ? "Network / TLS request failed" : String("HTTP ") + code;
     http.end();
@@ -299,6 +302,7 @@ bool captureJpeg(const Command& command, uint8_t** jpeg, size_t* length, String&
   if (!isCurrent(command)) return false;
   // Serialize M5's I2C setup/teardown with touch handling. No lock is held during HTTP.
   xSemaphoreTake(hardwareLock, portMAX_DELAY);
+  uint32_t captureStarted = millis();
   bool started = isCurrent(command) && CoreS3.Camera.begin();
   if (!started) {
     xSemaphoreGive(hardwareLock);
@@ -314,6 +318,9 @@ bool captureJpeg(const Command& command, uint8_t** jpeg, size_t* length, String&
   // Each request is a snapshot. Release the camera before waiting for the server.
   esp_camera_deinit();
   xSemaphoreGive(hardwareLock);
+  Serial.printf("[focus] capture ok=%d bytes=%u elapsed_ms=%lu\n", converted,
+                static_cast<unsigned>(*length),
+                static_cast<unsigned long>(millis() - captureStarted));
   if (!converted) error = acquired ? "JPEG conversion failed" : "Camera capture failed";
   return converted;
 }
@@ -475,6 +482,8 @@ void worker(void*) {
 }
 
 void drawStatus(const char* status, const char* detail, bool mock = false) {
+  Serial.printf("[focus] ui status=%s detail=%s provider=%s\n", status, detail,
+                mock ? "mock" : "pending/live");
   CoreS3.Display.fillScreen(TFT_BLACK);
   CoreS3.Display.setTextColor(TFT_WHITE, TFT_BLACK);
   CoreS3.Display.setTextSize(2);
@@ -504,6 +513,7 @@ void drawStatus(const char* status, const char* detail, bool mock = false) {
 }
 
 void setup() {
+  Serial.begin(115200);
   CoreS3.begin(M5.config());
   CoreS3.Display.setRotation(1);
   CoreS3.Display.setTextWrap(false);
@@ -511,6 +521,7 @@ void setup() {
   uiQueue = xQueueCreate(1, sizeof(UiEvent));
   hardwareLock = xSemaphoreCreateMutex();
   configured = configurationValid();
+  Serial.printf("[focus] boot configured=%d camera=idle; commands: START STOP END\n", configured);
   if (!uiQueue || !hardwareLock) {
     drawStatus("UNKNOWN", "Cannot allocate worker resources");
     return;
@@ -521,10 +532,40 @@ void setup() {
              configured ? "Press START to allow image upload" : "Copy config.example.h to config.h");
 }
 
+void pollSerialControl() {
+  static char line[16];
+  static size_t used = 0;
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == '\r' || c == '\n') {
+      line[used] = '\0';
+      if (configured && workerReady) {
+        if (strcmp(line, "START") == 0) {
+          changeIntent(Intent::Run);
+          drawStatus("STARTING", "Waiting for server");
+        } else if (strcmp(line, "STOP") == 0) {
+          changeIntent(Intent::Pause);
+          drawStatus("PAUSED", "Stopped locally; syncing server");
+        } else if (strcmp(line, "END") == 0) {
+          changeIntent(Intent::End);
+          drawStatus("ENDED", "Stopped locally; syncing server");
+        }
+      }
+      used = 0;
+    } else if (used < sizeof(line) - 1) {
+      line[used++] = c;
+    } else {
+      // An oversized line cannot become a command by truncation.
+      line[0] = '!';
+    }
+  }
+}
+
 void loop() {
   // Hardware access is brief except during a single camera snapshot/encoding.
   if (hardwareLock && xSemaphoreTake(hardwareLock, 0) == pdTRUE) {
     CoreS3.update();
+    pollSerialControl();
     if (configured && workerReady && CoreS3.Touch.getCount() > 0) {
       auto touch = CoreS3.Touch.getDetail();
       if (touch.wasPressed() && touch.y >= 182 && touch.y <= 232) {
@@ -544,8 +585,10 @@ void loop() {
     if (uiQueue && xQueueReceive(uiQueue, &event, 0) == pdTRUE &&
         event.generation == readCommand().generation) {
       drawStatus(event.status, event.detail, event.mock);
-      if (event.notify && readCommand().intent == Intent::Run && FocusConfig::ENABLE_BEEP)
+      if (event.notify && readCommand().intent == Intent::Run && FocusConfig::ENABLE_BEEP) {
         CoreS3.Speaker.tone(880, 120);
+        Serial.println("[focus] beep requested");
+      }
     }
     xSemaphoreGive(hardwareLock);
   }
