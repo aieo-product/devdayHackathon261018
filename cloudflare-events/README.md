@@ -238,12 +238,16 @@ curl --fail-with-body "$EVENTS_URL/devices/control" \
 | --- | --- |
 | `npm run test:events` | 68件通過。OAuth 16、Webhook 12、イベントbroker 17、端末registry 16、Miniflare統合7 |
 | 既存API・クライアントのテスト | 37件通過 |
+| 既存Workerのテスト | 1件通過 |
 | `npm run test:mac-check` | 51件通過。ローカルプロキシ19、遠隔制御32 |
 | `npm run smoke:events` | 公開Workerで12項目通過。OAuth・MCP・試験専用の偽端末・イベント登録 |
 | 接続設定UI | モックブラウザ試験7項目通過 |
 | 遠隔操作UI | モックChrome試験10シナリオ通過。ON/OFF、許可待ち中のOFF、許可解除、非表示、期限切れ、複数端末、モバイル等 |
+| 公開APIを使うブラウザE2E | Chrome仮想カメラ＋実判定API＋公開Events Workerで7項目通過。遠隔ON、2回の検知、メタデータ中継、遠隔OFF・停止報告まで確認 |
 
 署名・callback検証、購読・重複・再試行・解除、source分離、端末状態のrevision、Workers/SQLiteでの再起動を自動テストで確認しています。期限切れのONで121秒後にカメラ許可が返る試験でも、API呼び出し・画像送信が発生しないことを確認しました。
+
+公開APIのブラウザE2Eでは、許可確認だけでは画像を送らず、新しいONで撮影を開始しました。継続保持2秒・クールダウン0で異なる通知IDを2件受信し、OAuthの `get_focus_events` から同じ2件・規定の8フィールド・画像なしを確認しました。OFF後は全カメラトラック終了、フレーム送信停止、端末registryの実状態OFF・指示適用済みを確認しています。画像要求8件・応答7件で、OFF時に処理中の1件を取り消しました。ページエラー0、モバイルの横方向はみ出しなし、試験用OAuth認可は終了後に取り消しました。カメラ入力には仮想映像を使っています。
 
 実際のdotsアカウントでのOAuth同意・購読・通知、実カメラ・Reachy Mini/CoreS3を使った遠隔ON/OFFは未確認です。公開Workerの疎通試験とモックの成功を、dots実接続や実機制御の成功として扱いません。
 
