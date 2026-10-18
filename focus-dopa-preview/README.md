@@ -81,7 +81,7 @@ chmod 600 ../.env.focus-api.local
 macOS 12以降、Xcode Command Line Toolsが必要です。生成済みのアプリやビルドキャッシュは配布対象に含めず、受け取り側でビルドします。
 
 ```sh
-./desktop-overlay/build.sh
+bash ./desktop-overlay/build.sh
 open "./desktop-overlay/build/Focus Desktop Overlay.app"
 ```
 
