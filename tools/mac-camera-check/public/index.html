@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>Focus / Macカメラ動作確認</title>
+    <link rel="stylesheet" href="/style.css">
+    <script type="module" src="/app.mjs"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="header">
+        <a class="wordmark" href="/" aria-label="Focus 動作確認">focus<span class="brand-dot">.</span></a>
+        <span class="local-badge"><span></span> Macで動作確認</span>
+      </header>
+      <section class="intro">
+        <p class="eyebrow">CAMERA CHECK / 01</p>
+        <h1>スマホを持つと、<br class="mobile-break">どう反応する？</h1>
+        <p>手元をカメラに映して、検知から通知までを確認します。</p>
+      </section>
+      <div id="error-banner" class="error-banner" role="alert" hidden></div>
+      <div class="workspace">
+        <section class="camera-card" aria-label="カメラと操作">
+          <div class="camera-topline"><span><span id="camera-dot" class="camera-dot"></span><span id="camera-label">カメラはオフ</span></span><span>最大 640 × 480</span></div>
+          <div class="camera-stage">
+            <video id="camera-video" muted playsinline aria-label="Macカメラのライブ映像"></video>
+            <div id="camera-placeholder" class="camera-placeholder">
+              <svg width="50" height="50" viewBox="0 0 50 50" fill="none" aria-hidden="true"><rect x="8" y="15" width="34" height="24" rx="7" stroke="currentColor" stroke-width="1.5"/><path d="m18 15 3-5h8l3 5" stroke="currentColor" stroke-width="1.5"/><circle cx="25" cy="27" r="7" stroke="currentColor" stroke-width="1.5"/></svg>
+              <strong id="camera-placeholder-title">準備ができたら、確認開始</strong>
+              <span>ボタンを押すまでカメラは起動しません</span>
+            </div>
+            <div id="notification" class="notification" role="alert" aria-live="assertive" hidden><span class="notification-icon" aria-hidden="true">↗</span><div><strong>スマホを置いて、集中に戻ろう。</strong><span id="notification-detail">スマホの連続保持を検知しました</span></div></div>
+            <span id="capture-label" class="capture-label" hidden>撮影待機中</span>
+          </div>
+          <div class="controls">
+            <div class="control-settings"><label for="duration">確認時間 <select id="duration"><option value="60">1分</option><option value="180" selected>3分</option><option value="300">5分</option></select></label><label class="sound-label"><input id="sound-enabled" type="checkbox" checked>通知音</label></div>
+            <div class="control-buttons"><button id="start-button" class="button button-primary" disabled>確認開始 <span aria-hidden="true">→</span></button><button id="pause-button" class="button button-secondary" disabled>一時停止</button><button id="resume-button" class="button button-primary" hidden>再開 <span aria-hidden="true">→</span></button><button id="end-button" class="button button-quiet" disabled>終了</button></div>
+            <p class="privacy-note">開始後の画像は判定のためCloudflare Worker・OpenAIに送信されます。この確認UIは画像・APIキーを保存しません。別タブに移るとカメラと送信を停止します。</p>
+          </div>
+        </section>
+        <section class="result-card" aria-labelledby="result-title">
+          <div class="result-heading"><h2 id="result-title">検知の状態</h2><span id="state-label" class="state-badge" data-state="idle">待機中</span></div>
+          <p id="status-message" class="status-message" aria-live="polite">APIとの接続を確認しています…</p>
+          <div class="hold-block"><div class="metric-label">スマホを持ち続けた時間</div><div class="hold-value"><span id="hold-seconds">0.0</span><span class="unit"> / <span id="required-seconds">5.0</span> 秒</span></div><progress id="hold-progress" max="5000" value="0" aria-label="スマホの連続保持時間"></progress><p class="metric-note">連続5秒で通知。手元が見えない・手放すとリセット。</p></div>
+          <div class="probability-grid"><div><span class="metric-label">スマホを持つ確率</span><strong id="phone-probability">—</strong></div><div><span class="metric-label">手元の見やすさ</span><strong id="observable-probability">—</strong></div></div>
+          <dl class="detail-list"><div><dt>判定の往復時間</dt><dd id="latency">—</dd></div><div><dt>送信フレーム / 通知</dt><dd><span id="frame-count">0</span> / <span id="notification-count">0</span></dd></div><div><dt>確認時間の残り</dt><dd id="remaining-time">3:00</dd></div><div><dt>次の撮影まで</dt><dd id="next-capture">—</dd></div><div><dt>判定プロバイダー</dt><dd id="provider">—</dd></div></dl>
+          <p id="reason" class="reason">まだ画像を送信していません</p>
+        </section>
+      </div>
+      <section class="howto" aria-label="確認の手順"><div><span>01</span><p><strong>手元を映す</strong>明るい場所で、手元が画面に入る位置へ。</p></div><div><span>02</span><p><strong>スマホを5秒持つ</strong>確率と連続保持の進捗を確認。</p></div><div><span>03</span><p><strong>スマホを置く</strong>通知後は60秒待機。終了でカメラもオフ。</p></div></section>
+      <section class="log-card"><div class="log-heading"><h2>確認ログ</h2><span>最新30件・この画面内のみ</span></div><ol id="event-log" class="event-log" aria-label="確認イベント"></ol></section>
+      <footer><span>FOCUS / 開発用の確認画面</span><span id="endpoint">接続先を確認中</span></footer>
+    </main>
+  </body>
+</html>

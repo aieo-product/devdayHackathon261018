@@ -11,6 +11,27 @@ const snapshot = (patch = {}) => ({ session_id: 'test-session', state: 'observin
   cooldown_remaining_ms: 0, next_capture_after_ms: 0, provider: 'mock', reason: 'test', ...patch });
 const response = (data) => new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
+test('default fetch keeps the global receiver required by browser fetch', { concurrency: false }, async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  // Native Window.fetch rejects a class instance as its receiver; Node fetch does not.
+  globalThis.fetch = async function (url, options) {
+    assert.equal(this, globalThis, 'fetch must be called with the browser global receiver');
+    requests.push(url);
+    return response(snapshot({ state: url.endsWith('/control') ? 'ended' : 'observing' }));
+  };
+  try {
+    const client = new FocusClient({ baseUrl: 'https://api.example.test', token: 'test-only-token' });
+    await client.start();
+    assert.equal(client.active, true);
+    assert.equal((await client.frame(image)).state, 'observing');
+    assert.equal((await client.end()).state, 'ended');
+    assert.equal(requests.length, 3, 'session creation, image upload and end all use the bound fetch');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('thin client works against real HTTP app: notification, duplicate, pause, resume and end', async (t) => {
   let calls = 0;
   let now = 0;

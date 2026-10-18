@@ -12,7 +12,9 @@
     "start:worker": "wrangler dev -c cloudflare/wrangler.jsonc",
     "deploy:worker": "wrangler deploy -c cloudflare/wrangler.jsonc",
     "check:worker": "wrangler deploy --dry-run -c cloudflare/wrangler.jsonc",
-    "test:worker": "node --test cloudflare/test/*.test.mjs"
+    "test:worker": "node --test cloudflare/test/*.test.mjs",
+    "start:mac-check": "node --env-file-if-exists=cloudflare/.env.connection tools/mac-camera-check/server.mjs",
+    "test:mac-check": "node --test tools/mac-camera-check/server.test.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
