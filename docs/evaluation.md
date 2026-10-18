@@ -14,9 +14,9 @@
 | Mac確認UI | カメラ、表示・音、停止・再開、遠隔ON/OFFを実装 | [コードと手順](../tools/mac-camera-check/README.md)、[PR #6](https://github.com/aieo-product/devdayHackathon261018/pull/6) |
 | Events Worker | MCP 2.0、OAuth、イベント中継・配送、監視指示と実状態管理を実装・別Workerへ公開 | [手順・仕様](../cloudflare-events/README.md)、[PR #10](https://github.com/aieo-product/devdayHackathon261018/pull/10) |
 | Reachy Mini Wireless | ソース・配布設定・実機記録を収録。旧5秒条件で実画像からfear1の動作・音声まで確認 | [実装](../src/reachy_focus/)、[実機記録](reachy/validation.md) |
-| CoreS3 | クライアント実装、ビルド・書込み・撮影停止状態での起動を確認 | [実装と実機記録](../devices/cores3/README.md) |
+| CoreS3 | ビルド・書込みに加え、実画像5枚の送信と2回の保持検出を担当が報告。通知まで未達 | [実装と実機記録](../devices/cores3/README.md) |
 
-現行のNode APIと公開Workerの通知条件は2秒・クールダウンなしです。過去の5秒試験は、その時点の実画像・実機確認の証拠としてのみ扱います。特にReachyの5313msの実機記録を、現行2秒条件で再検証した結果とは扱いません。
+現行のNode APIと公開Workerの通知条件は2秒・クールダウンなしです。過去の5秒試験は、その時点の実画像・実機確認の証拠としてのみ扱います。特にReachyの5313msの実機記録を、現行2秒条件で再検証した結果とは扱いません。Reachy 0.3.0は[10秒の非保持でダンスを始め、最初の保持判定で中断する処理](reachy/dance.md)を追加しています。ダンス中断は2秒の通知確定とは別の端末リアクションで、実画像を使ったダンス中の切替は未確認です。
 
 ## 審査4観点と確認できる根拠
 
@@ -33,6 +33,8 @@
 
 共通API・Worker・Mac・Eventsの自動テストは**計157件通過**しています。ReachyのPython試験は別の実機開発記録に記載し、この157件に混ぜていません。
 
+再実行環境はNode.js 26.8.2 / npm 11.19.1 / macOS arm64です。Worker・Eventsは`npm ci`で固定lockの依存（Miniflare 5.20261012.1-beta、esbuild 0.28.2、Wrangler 4.151.1）を導入して再確認しました。ReachyのPython試験はこの環境に依存がなく今回未実行で、0.3.0の47件成功は[PR #11](https://github.com/aieo-product/devdayHackathon261018/pull/11)の担当記録です。
+
 | 自動テスト・モック | 結果 | 根拠 |
 | --- | --- | --- |
 | API・共通クライアント | `npm test` **37件通過** | [API試験](../api/test/)、[クライアント試験](../clients/focus-client.test.mjs) |
@@ -48,7 +50,7 @@
 | Macの2秒・繰り返し通知 | 同一セッションで2回、確認済み保持2534ms / 2386ms | Chrome仮想カメラ→公開Worker→実OpenAI。required_hold_ms 2000、クールダウン0。[PR #6](https://github.com/aieo-product/devdayHackathon261018/pull/6) |
 | 公開APIを通す遠隔UI E2E | **7項目通過**、通知ID2件がOAuth履歴と一致 | Chrome仮想カメラ＋実判定API＋公開Events Worker。許可確認→遠隔ON→2回検知→中継→遠隔OFF→適用確認・解除。[PR #10](https://github.com/aieo-product/devdayHackathon261018/pull/10) |
 | Reachyの物理カメラ・動作 | 連続5313msで1回通知、fear1の動作・音声を利用者が確認、時間終了 | **旧5秒・60秒待機時点の試験**。本体の実画像→公開Workerの実OpenAI→本体反応。[実機記録](reachy/validation.md)。現行2秒条件の物理再試験ではない |
-| CoreS3 | ビルド・USB書込み・PAUSED起動、停止/終了を確認 | 実機の撮影・画像送信・ビープまでの結合は未確認。公開APIの画像なし開始/終了で2000msを確認。[記録](../devices/cores3/README.md) |
+| CoreS3 | 実画像5枚をAPIへ送信、スマホ保持を2回検出した担当報告。試験後は停止済み | 観測間隔2500ms超で保持時間がリセットし通知は0回。画像認識の成功と通知・ビープ未達を区別。[記録](../devices/cores3/README.md) |
 
 遠隔UI E2Eの入力は仮想映像です。通知2件は画像を含まない規定の8フィールドでEventsへ届きました。OFF後は全仮想カメラトラック終了・フレーム増加停止・registryの実状態OFFと指示適用済みを確認。画像要求8件・応答7件で、停止時に処理中の1件を取り消しました。ページエラー0、モバイル横方向はみ出しなし、試験用OAuth認可は取り消し済みです。
 

@@ -30,6 +30,7 @@ tags:
 | [PR #6](https://github.com/aieo-product/devdayHackathon261018/pull/6) | Mac確認UI、2秒保持、通知後も繰り返し検知 |
 | [PR #8](https://github.com/aieo-product/devdayHackathon261018/pull/8) | Reachy Mini本体アプリ、反応・音声、配布設定 |
 | [PR #10](https://github.com/aieo-product/devdayHackathon261018/pull/10) | 独立Events Worker、MCP Events、Mac監視の遠隔ON/OFF |
+| [PR #11](https://github.com/aieo-product/devdayHackathon261018/pull/11) | Reachyの集中中ダンスと保持判定による即時中断 |
 | [PR #9](https://github.com/aieo-product/devdayHackathon261018/pull/9) | 評価根拠、提出原稿、デモ台本、機械可読JSON |
 
 ```sh
@@ -61,6 +62,8 @@ MCP・遠隔監視の追加仕様は[リポジトリの共通API仕様書](cloud
 3. 新しい画像で2秒以上の保持を確認すると、APIが `notify:true` と一意の通知IDを返します。
 4. 端末が画面・音・動きに変換します。必要なスマホ作業中は一時停止できます。
 
+Reachyのダンス中は例外として、最初の新しいスマホ保持判定でダンスを止めてfear1へ切り替えます。この端末側の即時リアクションは、共通APIの2秒通知とは区別します。
+
 2秒は画像の受理時刻に基づく継続保持条件です。通信・推論の遅延があるため、実際に持った瞬間から正確に2秒後の通知は保証しません。判定不能時は通知せず、停止後に遅れて戻った結果も通知しません。
 
 | [公式イベント](https://luma.com/OpenAIDevDay2026CommunityHackathonTokyo)の観点 | 実装・評価材料 |
@@ -80,8 +83,8 @@ MCP・遠隔監視の追加仕様は[リポジトリの共通API仕様書](cloud
 | Macの2秒・繰り返し通知 | Chrome仮想カメラ＋実OpenAIで同一セッション2回通知。保持2534ms / 2386ms | 仮想入力の結果を物理カメラの再試験と混同しない |
 | MCP Events・監視ON/OFF | 公開Events疎通12項目、仮想カメラ＋実APIのブラウザE2E 7項目通過。通知2件の履歴一致、遠隔OFF後の撮影停止・適用確認 | 実dotsのOAuth接続・購読・通知、Reachy/CoreS3の遠隔監視アダプター |
 | Reachy Mini Wireless | 本体実画像→公開API→5313ms保持検知→fear1の動作・音声→時間終了を確認 | この実機記録は旧5秒条件。現行2秒の実機再試験、ページ/Macを閉じた単独継続は未確認 |
-| Reachy 0.2.9の追加機能 | cheerful1、日本語声かけ、10/20/30秒の待機リズム、リアクション中断時の姿勢復帰を実装。担当記録にPython41件と後続CI成功 | 版ごとの実機確認範囲は[Reachy記録](docs/reachy/validation.md)を参照。Python試験は今回の157件に含まない |
-| CoreS3 | ビルド、USB書込み、停止状態での起動。公開APIの画像なし開始/終了で2000msを確認 | 本体からの画像送信・実判定・ビープを通す一連動作 |
+| Reachy 0.3.0の追加機能 | 10秒の非保持でdance1、最初の保持判定でダンス中断・fear1へ切替。cheerful1、日本語声かけ、基準姿勢復帰も収録。担当記録にPython47件成功 | ダンス中の実画像検知と動きの見た目は未確認。[変更と試験範囲](docs/reachy/dance.md)。Python試験は今回の157件に含まない |
+| CoreS3 | ビルド・USB書込み・起動に加え、実画像5枚を送りスマホ保持を2回検出した担当報告あり。HTTPS接続再利用の改善を統合 | 観測間隔が2.5秒を超えて保持時間がリセットし、通知・ビープまで未達。[最新試験記録](devices/cores3/README.md#実画像試験の担当報告2026-10-18) |
 
 詳しい試験条件・制約は[評価資料](docs/evaluation.md)、端末ごとの記録は[Reachy](docs/reachy/validation.md)・[CoreS3](devices/cores3/README.md)を参照してください。検知確率1.0はモデルの出力値であり、認識精度100%を意味しません。
 

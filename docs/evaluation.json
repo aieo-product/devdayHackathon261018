@@ -49,15 +49,17 @@
         "node": "26.8.2",
         "npm": "11.19.1",
         "platform": "macOS arm64",
-        "worker_dependency_resolution": "global_fallback",
-        "miniflare": "5.20260804.1-alpha",
-        "esbuild": "0.28.1"
+        "worker_dependency_resolution": "npm_ci_package_lock",
+        "miniflare": "5.20261012.1-beta",
+        "esbuild": "0.28.2",
+        "wrangler": "4.151.1",
+        "workerd": "1.20261012.1"
       },
       "reachy_python_rerun": false
     },
     "integration": {
       "branch": "main",
-      "merged_source_commit": "d8e95c6eb96fb4c914eb81d465294680720d1d5c",
+      "merged_source_commit": "bc85f236739727b89e4070862cee9c3df9f768c7",
       "locally_tested_commit": "b349cc95fcf062c673a3fb08e4d73dea4c72071e",
       "pull_requests": [
         4,
@@ -65,8 +67,10 @@
         6,
         8,
         9,
-        10
-      ]
+        10,
+        11
+      ],
+      "worker_events_retested_commit": "e13216439af2db6c09de1be784307fc00b064981"
     }
   },
   "ai_integration": {
@@ -127,7 +131,7 @@
     },
     {
       "id": "cores3",
-      "status": "compiled_flashed_idle_boot_verified_image_e2e_unverified",
+      "status": "physical_image_upload_and_phone_detection_reported_notification_not_reached",
       "evidence": [
         "devices/cores3/README.md",
         "devices/cores3/cores3.ino"
@@ -140,8 +144,12 @@
       "current_two_second_physical_retest_verified": false,
       "evidence": [
         "src/reachy_focus/",
-        "docs/reachy/validation.md"
-      ]
+        "docs/reachy/validation.md",
+        "docs/reachy/dance.md"
+      ],
+      "app_version": "0.3.0",
+      "dance_implemented": true,
+      "dance_physical_transition_verified": false
     },
     {
       "id": "mcp_events_remote_control",
@@ -285,6 +293,24 @@
       "session_timer_completed": true,
       "current_two_second_retest": false,
       "evidence": "docs/reachy/validation.md"
+    },
+    {
+      "id": "reachy_030_python",
+      "command": "python -m pytest -q",
+      "passed": 47,
+      "failed": 0,
+      "execution": "implementation_owner_record_not_rerun_here",
+      "evidence": "https://github.com/aieo-product/devdayHackathon261018/pull/11"
+    },
+    {
+      "id": "cores3_physical_image_trial",
+      "execution": "implementation_owner_session_report_not_rerun_here",
+      "frames_sent": 5,
+      "phone_positive_results": 2,
+      "notifications": 0,
+      "hold_reset_reason": "observation_gap_exceeded_2500ms",
+      "capture_and_session_stopped": true,
+      "evidence": "devices/cores3/README.md"
     }
   ],
   "judging_criteria": [

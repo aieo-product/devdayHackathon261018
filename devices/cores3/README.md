@@ -109,4 +109,13 @@ arduino-cli compile --fqbn m5stack:esp32:m5stack_cores3 devices/cores3
 - [Espressif の HTTPS クライアント例](https://github.com/espressif/arduino-esp32/blob/master/libraries/HTTPClient/examples/BasicHttpsClient/BasicHttpsClient.ino)
 - [ArduinoJson 7.4.2](https://github.com/bblanchon/ArduinoJson/releases/tag/v7.4.2) / [v7 JsonDocument](https://arduinojson.org/v7/api/jsondocument/)
 
-2026-10-18追記：公開Worker用HTTPS設定（共有token・ISRG Root X1・ローカルHTTP無効）で再ビルドと4領域hash検証付き実機書き込みに成功。USB native reset後のwatchdog resetで `configured=1 camera=idle` / `PAUSED` を確認。保持時間を固定5000msとして拒否する検証を、API指定の正の範囲を受け入れる検証に修正しました。STARTは画像送信の明示許可不足として自動承認レビューに拒否され、撮影/実機API/通知は未検証。STOP/END後は `ENDED / No active server session` を確認しています。
+2026-10-18の初期接続試験の追記（後続結果は次項）：公開Worker用HTTPS設定（共有token・ISRG Root X1・ローカルHTTP無効）で再ビルドと4領域hash検証付き実機書き込みに成功。USB native reset後のwatchdog resetで `configured=1 camera=idle` / `PAUSED` を確認。保持時間を固定5000msとして拒否する検証を、API指定の正の範囲を受け入れる検証に修正しました。STARTは画像送信の明示許可不足として自動承認レビューに拒否され、撮影/実機API/通知は未検証。STOP/END後は `ENDED / No active server session` を確認しています。
+
+
+## 実画像試験の担当報告（2026-10-18）
+
+上記の初期接続試験の後、担当チャット「DevDayCommunityHackathon261018」から、本体の実画像5枚を公開APIへ送信し、スマホ保持を2回検出した報告がありました。通信間隔が2500msを超えて継続保持がリセットし、通知は発生しませんでした。撮影とAPIセッションは試験終了後に停止済みです。
+
+HTTPS接続をフレーム間で再利用する改善はコミット`964b566f184a36dead672079c8661721c3868e3d`に含まれます。ここに記載した実機結果は担当報告であり、資料更新時の再試験ではありません。本体からの画像送信と認識、継続保持による通知、実機ビープの聴取は分けて扱います。通知・ビープは引き続き未達です。
+
+観測間隔の許容を8秒へ広げる案は提案段階です。統合済みAPIの上限は2500msで、変更済みとして扱いません。

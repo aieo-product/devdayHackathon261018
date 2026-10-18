@@ -1,6 +1,6 @@
 # Focus dance (0.3.0)
 
-最新の既定共有ブランチ `origin/feat/shared-focus-api` の1352ce0から `codex/reachy-focus-dance` を作成。リモートにmainブランチはない。API・Cloudflare・他デバイスは変更しない。
+開発時は `origin/feat/shared-focus-api` の1352ce0から `codex/reachy-focus-dance` を作成し、[PR #11](https://github.com/aieo-product/devdayHackathon261018/pull/11)で統合した。現在の統合先は `main`。この機能追加ではAPI・Cloudflare・他デバイスを変更していない。
 
 - 新しい画像が可視性0.7以上、スマホ確率0.2以下の非検出を返す時間が10秒続いたら、公式dance1を再生する。音声の設定に従い、終了後も条件が続けば繰り返す。
 - ダンス中に、新しい画像が可視性0.7以上・スマホ確率0.8以上を返したら、notify=falseの最初の保持判定でもFearへ切り替える。リアクション途中の頭の姿勢を通常姿勢として保存しない。
