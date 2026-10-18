@@ -1,5 +1,7 @@
 # 共通判定API仕様書（Cloudflare Worker版・レビュー用）
 
+> このファイルと同じチェックアウトの`openapi.yaml`は**5秒保持・60秒待機**版です。稼働中のWorkerはPR #6の**2秒保持・待機なし**版です。[現在の公開仕様書](https://focus-shared-api-20261018.take-otani.workers.dev/docs) / [版と検証の比較](../docs/evaluation.md)を参照してください。
+
 公開URL：`https://focus-shared-api-20261018.take-otani.workers.dev`。ローカル：`http://127.0.0.1:8787`。REST + Bearer認証。仕様の実装元は`cloudflare/src/worker.mjs`と`api/src/engine.mjs`です。画面実装とは独立して、Mac・Reachy Mini・CoreS3から共通利用します。
 
 Mac・Reachy Mini Wireless・CoreS3は、自分で撮影した画像をこのAPIへ送ります。APIがスマホを手に持つ状態の判定、5秒間の継続保持、通知間隔、セッション状態を管理します。端末はAPIが返した`notify: true`を、自機のOS通知・音・動きに変換します。端末側に独自のしきい値を持たせません。

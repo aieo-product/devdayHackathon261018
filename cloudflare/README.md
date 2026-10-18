@@ -1,5 +1,7 @@
 # 共通判定API：Cloudflare Worker引き継ぎ
 
+> 以下の配備手順・仕様は、このチェックアウトの**5秒保持・60秒待機**版です。稼働中の公開WorkerはPR #6の**2秒保持・待機なし**版で、差があります。この旧版から配備すると稼働中の仕様を戻すため、提出資料の確認だけでは再配備しません。[版と検証の比較](../docs/evaluation.md) / [現在の公開仕様書](https://focus-shared-api-20261018.take-otani.workers.dev/docs)。
+
 Mac・Reachy Mini・CoreS3が同じREST APIを利用します。RESTは通信形式、Bearerは認証方式で、両方を組み合わせます。画面・撮影・音や動きの実装は各端末チームの担当です。レビュー用の詳細仕様は[API仕様書.md](./API仕様書.md)、機械可読な型は[openapi.yaml](./openapi.yaml)を参照してください。
 
 ## メンバー向け共有先
