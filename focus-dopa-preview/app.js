@@ -11,7 +11,33 @@ import { DesktopOverlayClient } from './desktop-overlay-client.js';
 import { ActionShowcase } from './action-showcase.js';
 const $=id=>document.getElementById(id);
 const showcaseView=new URL(location.href).searchParams.get('showcase')==='1';
+document.body.dataset.view=showcaseView?'showcase':'focus';
 if(showcaseView){document.body.dataset.showcaseView='true';$('api-mode').value='demo';$('auto-mini').checked=false;$('desktop-overlay-enabled').checked=false;}
+else arrangeFocusSettings();
+
+function arrangeFocusSettings(){
+ const form=$('settings-dialog').querySelector('form');
+ const done=form.querySelector('.dialog-done');
+ const addSection=(className,label,elements)=>{
+  const section=document.createElement('details');
+  section.className=className;
+  const summary=document.createElement('summary');summary.textContent=label;section.append(summary);
+  for(const element of elements){
+   if(!element)continue;
+   element.querySelectorAll('button').forEach(button=>button.type='button');
+   section.append(element);
+  }
+  form.insertBefore(section,done);
+ };
+ addSection('focus-connection-settings','接続・通知設定',[
+  document.querySelector('.api-panel'),...document.querySelectorAll('.monitor-panel')
+ ]);
+ addSection('focus-appearance-settings','表示・演出設定',[
+  document.querySelector('.pattern-bar'),document.querySelector('.intensity-label')
+ ]);
+ document.querySelector('.app-subtitle').textContent='通常モード';
+ form.querySelector('.settings-note p').textContent='音のON/OFFは画面右上から。接続・通知や演出の設定は下で変更できます。';
+}
 const profiles={
  bounce:{title:'NEON BOUNCE',caption:'弾むリアクション × ネオンの波紋',slogan:'ぷにっと、いこう！',duration:850},
  rush:{title:'ARCADE RUSH',caption:'ためて跳ぶ × スピードライン × ゲージ点火',slogan:'よーし、スタート！',duration:680},
@@ -19,7 +45,7 @@ const profiles={
  fever:{title:'DOPA FEVER',caption:'連続ジャンプ × カラフルな流星 × 光のフィナーレ',slogan:'さあ、いっしょに全開！',duration:1350}
 };
 let pattern='bounce',intensity='max',cueTimers=[],animations=new Set(),log=[],lastMilestone=0,sound=false,videoRun=0;
-let tapLevel=0,lastTapAt=-Infinity,desiredSound=true,audioUnlock=null;
+let tapLevel=0,lastTapAt=-Infinity,desiredSound=true,audioUnlock=null,soundContext=null;
 let characterProfile=null;
 const reactionMarks=new Set();
 const reduce=matchMedia('(prefers-reduced-motion: reduce)');
@@ -439,21 +465,31 @@ for(const button of document.querySelectorAll('[data-card]'))button.addEventList
 for(const button of document.querySelectorAll('[data-demo]'))button.addEventListener('click',()=>cue(button.dataset.demo,{demo:true}));
 $('intensity').addEventListener('change',e=>{intensity=e.target.value;cancelDesktopCue();document.body.dataset.intensity=intensity;clearCue();effects.setIntensity(intensity);stateSpeech();$('demo-caption').textContent=`演出量：${intensity.toUpperCase()}`;});
 function renderSound(){
+ if(soundContext!==effects.audioContext){
+  soundContext?.removeEventListener('statechange',renderSound);
+  soundContext=effects.audioContext;
+  soundContext?.addEventListener('statechange',renderSound);
+ }
+ sound=Boolean(desiredSound&&effects.soundEnabled&&soundContext?.state==='running');
  $('sound-button').setAttribute('aria-pressed',String(sound));
  $('sound-button').querySelector('span').textContent=sound?'音 ON':desiredSound?'音を有効に':'音 OFF';
 }
 function unlockSound(){
- if(!desiredSound||sound||audioUnlock)return audioUnlock;
- audioUnlock=effects.setSound(true).then(enabled=>{sound=desiredSound&&enabled;renderSound();}).finally(()=>{audioUnlock=null;});
+ renderSound();
+ if(!desiredSound||(effects.soundEnabled&&effects.audioContext?.state==='running')||audioUnlock)return audioUnlock;
+ const pending=effects.setSound(true);
+ renderSound();
+ audioUnlock=pending.finally(()=>{audioUnlock=null;renderSound();});
  return audioUnlock;
 }
 $('sound-button').addEventListener('click',async()=>{
+ renderSound();
  if(sound){desiredSound=false;sound=false;await effects.setSound(false);renderSound();}
  else{desiredSound=true;await unlockSound();if(sound)effects.playSound('tap');}
 });
 // Browsers require a user gesture before audio. The first app action unlocks it.
 document.addEventListener('pointerdown',event=>{if(!event.target.closest('#sound-button'))void unlockSound();},{capture:true});
-document.addEventListener('keydown',()=>{void unlockSound();},{capture:true});
+document.addEventListener('keydown',event=>{if(!event.target.closest('#sound-button'))void unlockSound();},{capture:true});
 renderSound();
 $('notification-toggle').addEventListener('change',e=>{session.notificationEnabled=e.target.checked;$('notification-word').textContent=e.target.checked?'ON':'OFF';if(!e.target.checked){stopTransient();stateSpeech();}render();});
 $('test-notification').addEventListener('click',()=>{if($('test-notification').disabled)return;showFocusNotification({kind:'test',message:'検知すると、このようにお知らせします。',source:'表示テスト · 全画面＋小窓／トースト'});addLog('全画面リリックと通知をテスト');});
@@ -494,7 +530,7 @@ const tick=setInterval(()=>{
  if(session.tick()){stopTransient();render();addLog('デモの設定時間が完了');notifyCompletion();if(!document.hidden)cue('complete');return;}
  if(session.status==='running'){const milestone=Math.floor((1-session.ratio)*4);if(milestone>lastMilestone&&milestone<4){lastMilestone=milestone;if(!document.hidden)cue('milestone');else effects.playSound('milestone');addLog(`${Math.round(milestone*25)}%の時間が経過`);}render();}
 },250);
-window.addEventListener('pagehide',event=>{cancelDesktopCue({keepalive:true});suspendForPageExit({keepalive:true});if(!event.persisted){clearInterval(tick);clearInterval(desktopStatusTick);effects.destroy();}});
+window.addEventListener('pagehide',event=>{cancelDesktopCue({keepalive:true});suspendForPageExit({keepalive:true});if(!event.persisted){clearInterval(tick);clearInterval(desktopStatusTick);soundContext?.removeEventListener('statechange',renderSound);effects.destroy();}});
 window.addEventListener('pageshow',event=>{if(event.persisted){render();stateSpeech();refreshDesktopStatus();}});
 // Each lit segment is clipped by the exact remaining-time ratio.
 const svg=document.querySelector('.time-ring');

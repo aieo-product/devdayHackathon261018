@@ -1,3 +1,5 @@
+import { createWarningBuffer, WARNING_GAIN } from './warning-sound.js';
+
 const TAU = Math.PI * 2;
 const COLORS = ['#CAFF27', '#A279FF', '#52E6F4', '#FF73C7', '#FFF6AD'];
 const FEVER_COLORS = ['#FF38DF', '#35F3FF', '#CCFF22', '#FFD63D', '#B884FF'];
@@ -14,9 +16,6 @@ const SOUND_SEQUENCES = {
   complete: [[523.25, 0, 0.2], [659.25, 0.11, 0.2], [783.99, 0.22, 0.23],
     [1046.5, 0.36, 0.3], [1318.51, 0.53, 0.4]],
   notify: [[523.25, 0, 0.2], [659.25, 0.14, 0.25]],
-  // A finite alternating alarm: urgency comes from rhythm, not higher master volume.
-  detect: [[880, 0, 0.15], [659.25, 0.2, 0.15], [880, 0.4, 0.15],
-    [659.25, 0.6, 0.15], [987.77, 0.8, 0.15], [739.99, 1, 0.24]],
 };
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const random = (min, max) => min + Math.random() * (max - min);
@@ -37,6 +36,7 @@ export class Effects {
     this.audioNodes = new Set();
     this.audioContext = null;
     this.masterGain = null;
+    this.warningBuffer = null;
     this.rafId = null;
     this.lastFrame = null;
     this.destroyed = false;
@@ -111,11 +111,12 @@ export class Effects {
       }
       if (!this.audioContext || this.audioContext.state === 'closed') {
         this.audioContext = new AudioContextClass();
+        this.warningBuffer = null;
         this.masterGain = this.audioContext.createGain();
         this.masterGain.gain.value = 0.09;
         this.masterGain.connect(this.audioContext.destination);
       }
-      if (this.audioContext.state === 'suspended') {
+      if (this.audioContext.state !== 'running') {
         this.audioUnlockPending = true;
         await this.audioContext.resume();
       }
@@ -459,7 +460,7 @@ export class Effects {
   }
 
   playSound(type) {
-    if (this.destroyed || !this.soundEnabled || !Object.hasOwn(SOUND_SEQUENCES, type)) return false;
+    if (this.destroyed || !this.soundEnabled || (type !== 'detect' && !Object.hasOwn(SOUND_SEQUENCES, type))) return false;
     if (this.audioContext?.state !== 'running') {
       // Retain just one action while the first user gesture unlocks Web Audio.
       if (this.audioUnlockPending && this.pendingSound !== 'detect') this.pendingSound = type;
@@ -470,8 +471,33 @@ export class Effects {
     // Replace notes instead of accumulating loud chords. Only alarms preempt alarms.
     this.stopAudio();
     try {
+      if (type === 'detect' && !this.warningBuffer) this.warningBuffer = createWarningBuffer(context);
       const now = context.currentTime + 0.008;
       this.activeSound = type;
+      if (type === 'detect') {
+        const oscillator = context.createBufferSource();
+        const envelope = context.createGain();
+        oscillator.buffer = this.warningBuffer;
+        oscillator.loop = false;
+        envelope.gain.value = WARNING_GAIN;
+        oscillator.connect(envelope);
+        envelope.connect(context.destination);
+        const node = { oscillator, envelope };
+        this.audioNodes.add(node);
+        oscillator.onended = () => {
+          oscillator.disconnect();
+          envelope.disconnect();
+          this.audioNodes.delete(node);
+          if (!this.audioNodes.size) {
+            this.activeSound = null;
+            this.audioBusyUntil = 0;
+          }
+        };
+        this.audioBusyUntil = now + this.warningBuffer.duration;
+        oscillator.start(now);
+        oscillator.stop(this.audioBusyUntil);
+        return true;
+      }
       this.audioBusyUntil = now + Math.max(...SOUND_SEQUENCES[type].map(([, offset, duration]) => offset + duration + 0.025));
       for (const [frequency, offset, duration] of SOUND_SEQUENCES[type]) {
         const oscillator = context.createOscillator();

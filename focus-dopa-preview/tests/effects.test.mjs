@@ -28,8 +28,18 @@ function setup({ suspended = false } = {}) {
   let finishResume;
   const parameter = () => ({ value: 0, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} });
   class AudioContextStub {
-    state = suspended ? 'suspended' : 'running'; currentTime = 0; destination = {};
-    createGain() { return { gain: parameter(), connect() {}, disconnect() {} }; }
+    state = suspended ? 'suspended' : 'running'; currentTime = 0; destination = {}; sampleRate = 48000;
+    createGain() { return { gain: parameter(), connect(node) { this.destination = node; }, disconnect() { this.disconnected = true; } }; }
+    createBuffer(channels, length, sampleRate) {
+      const data = Array.from({ length: channels }, () => new Float32Array(length));
+      return { numberOfChannels: channels, length, sampleRate, duration: length / sampleRate,
+        getChannelData(channel) { return data[channel]; } };
+    }
+    createBufferSource() {
+      return { stopped: false, connect(node) { this.destination = node; }, disconnect() { this.disconnected = true; },
+        start(time) { this.startsAt = time; },
+        stop(time) { if (time === undefined) this.stopped = true; else this.endsAt = time; } };
+    }
     createOscillator() {
       return { frequency: parameter(), stopped: false, connect() {}, disconnect() {},
         start(time) { this.startsAt = time; },
@@ -201,7 +211,7 @@ test('detection replaces celebration with inward warning streaks and markers, th
   } finally { env.cleanup(); }
 });
 
-test('detection plays an opted-in alternating alarm for less than 1.4 seconds at the existing master gain', async () => {
+test('detection plays the selected four-second patrol siren without changing normal action volume', async () => {
   const env = setup();
   try {
     const { effects } = env;
@@ -213,12 +223,34 @@ test('detection plays an opted-in alternating alarm for less than 1.4 seconds at
     assert.equal(effects.audioNodes.size, 5);
     const gain = effects.masterGain.gain.value;
     effects.fire('detect');
-    assert.equal(effects.audioNodes.size, 6);
+    assert.equal(effects.audioNodes.size, 1);
     assert.equal(effects.masterGain.gain.value, gain);
-    assert.deepEqual([...effects.audioNodes].map(n => n.oscillator.frequency.value), [880, 659.25, 880, 659.25, 987.77, 739.99]);
-    assert.ok([...effects.audioNodes].every(n => n.oscillator.type === 'triangle'));
-    assert.ok(effects.audioBusyUntil > 1 && effects.audioBusyUntil < 1.4);
+    const [{ oscillator: source, envelope }] = effects.audioNodes;
+    assert.equal(source.buffer.duration, 4);
+    assert.equal(source.buffer.numberOfChannels, 1);
+    assert.equal(source.loop, false);
+    assert.equal(source.endsAt - source.startsAt, 4);
+    assert.equal(effects.audioBusyUntil, source.endsAt);
+    assert.equal(envelope.gain.value, 1.5);
+    assert.equal(envelope.destination, effects.audioContext.destination);
+    const samples = source.buffer.getChannelData(0);
+    let peak = 0;
+    for (const sample of samples) peak = Math.max(peak, Math.abs(sample));
+    assert.ok(Math.abs(peak - 0.28) < 0.000001);
+    assert.equal(samples[0], 0);
+    assert.ok(Math.abs(samples.at(-1)) < 0.001);
+    const rate = source.buffer.sampleRate;
+    for (const [start, frequency] of [[0.1, 960], [0.82, 640], [1.54, 960], [2.26, 640]]) {
+      let crossings = 0;
+      for (let i = Math.round(start * rate) + 1; i < Math.round((start + 0.4) * rate); i++) {
+        if (samples[i - 1] <= 0 && samples[i] > 0) crossings++;
+      }
+      assert.ok(Math.abs(crossings / 0.4 - frequency) <= 3, `${frequency} Hz phase`);
+    }
     await effects.setSound(false);
+    assert.equal(source.stopped, true);
+    assert.equal(source.disconnected, true);
+    assert.equal(envelope.disconnected, true);
     effects.fire('detect');
     assert.equal(effects.audioNodes.size, 0);
   } finally { env.cleanup(); }
@@ -245,7 +277,8 @@ test('warning sound preempts lower cues, survives visual clearing, and cannot st
     assert.deepEqual([...effects.audioNodes], alarm);
     effects.playSound('detect');
     assert.ok(alarm.every(n => n.oscillator.stopped));
-    assert.equal(effects.audioNodes.size, 6);
+    assert.equal(effects.audioNodes.size, 1);
+    assert.equal([...effects.audioNodes][0].oscillator.buffer, alarm[0].oscillator.buffer);
     effects.audioContext.currentTime = effects.audioBusyUntil + 0.001;
     assert.equal(effects.playSound('tap'), true);
     assert.equal(effects.audioNodes.size, 1);
@@ -254,13 +287,13 @@ test('warning sound preempts lower cues, survives visual clearing, and cannot st
   } finally { env.cleanup(); }
 });
 
-test('each action has a distinct bounded cue and repeated clicks replace rather than stack notes', async () => {
+test('each normal action has a distinct bounded cue and repeated clicks replace rather than stack notes', async () => {
   const env = setup();
   try {
     const { effects } = env;
     await effects.setSound(true);
     const signatures = new Set();
-    for (const type of ['tap', 'press', 'start', 'resume', 'milestone', 'break', 'pause', 'complete', 'notify', 'end', 'detect']) {
+    for (const type of ['tap', 'press', 'start', 'resume', 'milestone', 'break', 'pause', 'complete', 'notify', 'end']) {
       effects.stopAudio();
       assert.equal(effects.playSound(type), true, type);
       const nodes = [...effects.audioNodes];
@@ -294,7 +327,7 @@ test('the first action waits for gesture unlock, preserving warning priority wit
     env.unlock();
     assert.equal(await unlocking, true);
     assert.equal(effects.activeSound, 'detect');
-    assert.equal(effects.audioNodes.size, 6);
+    assert.equal(effects.audioNodes.size, 1);
     await effects.setSound(false);
     effects.audioContext.state = 'suspended';
     const cancelledUnlock = effects.setSound(true);
@@ -304,6 +337,53 @@ test('the first action waits for gesture unlock, preserving warning priority wit
     assert.equal(await cancelledUnlock, false);
     assert.equal(effects.soundEnabled, false);
     assert.equal(effects.audioNodes.size, 0);
+  } finally { env.cleanup(); }
+});
+
+test('warning completion releases its nodes and allows normal sounds again', async () => {
+  const env = setup();
+  try {
+    const { effects } = env;
+    await effects.setSound(true);
+    effects.playSound('detect');
+    const [{ oscillator: source, envelope }] = effects.audioNodes;
+    effects.audioContext.currentTime = source.endsAt;
+    source.onended();
+    assert.equal(source.disconnected, true);
+    assert.equal(envelope.disconnected, true);
+    assert.equal(effects.audioNodes.size, 0);
+    assert.equal(effects.activeSound, null);
+    assert.equal(effects.audioBusyUntil, 0);
+    assert.equal(effects.playSound('tap'), true);
+    effects.playSound('detect');
+    const [{ oscillator: stoppedOnDestroy }] = effects.audioNodes;
+    effects.destroy();
+    assert.equal(stoppedOnDestroy.stopped, true);
+  } finally { env.cleanup(); }
+});
+
+test('warning audio resumes after interruption and rebuilds its buffer for a replacement context', async () => {
+  const env = setup();
+  try {
+    const { effects } = env;
+    await effects.setSound(true);
+    effects.audioContext.state = 'interrupted';
+    const resuming = effects.setSound(true);
+    effects.playSound('detect');
+    assert.equal(effects.audioNodes.size, 0);
+    env.unlock();
+    assert.equal(await resuming, true);
+    assert.equal(effects.activeSound, 'detect');
+    const previousContext = effects.audioContext;
+    const previousBuffer = [...effects.audioNodes][0].oscillator.buffer;
+    effects.stopAudio();
+    effects.audioContext.state = 'closed';
+    assert.equal(await effects.setSound(true), true);
+    assert.notEqual(effects.audioContext, previousContext);
+    assert.equal(effects.playSound('detect'), true);
+    const buffer = [...effects.audioNodes][0].oscillator.buffer;
+    assert.notEqual(buffer, previousBuffer);
+    assert.equal(buffer.duration, 4);
   } finally { env.cleanup(); }
 });
 

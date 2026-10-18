@@ -1,0 +1,211 @@
+/* The everyday session view; showcase pages keep their existing layout. */
+body[data-view="focus"]:not([data-showcase-view="true"]) :is(
+  .preview-heading,
+  .companion-picker-section,
+  .lyric-showcase,
+  .fever-banner,
+  .action-showcase,
+  .playground,
+  .page-footer
+) {
+  display: none;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) .workspace {
+  width: 100%;
+  max-width: 1600px;
+  padding: clamp(14px, 1.4vw, 20px);
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) .app-window {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  border-radius: 22px;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) .app-header {
+  min-height: 78px;
+  padding: 17px 22px;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) .brand strong {
+  font-size: clamp(19px, 1.8vw, 26px);
+  letter-spacing: .04em;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) .dashboard {
+  padding: 16px;
+  gap: 14px;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) #settings-dialog {
+  width: min(780px, 92vw);
+  max-height: 88vh;
+  padding: clamp(20px, 2.5vw, 28px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) #settings-dialog .dialog-heading {
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) :is(.focus-connection-settings, .focus-appearance-settings) {
+  margin-top: 16px;
+  border: 1px solid #39455f;
+  border-radius: 14px;
+  background: #101827;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) :is(.focus-connection-settings, .focus-appearance-settings) > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 16px;
+  border-radius: 13px;
+  color: #edf2ff;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.5;
+  cursor: pointer;
+  list-style: none;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) :is(.focus-connection-settings, .focus-appearance-settings) > summary::-webkit-details-marker {
+  display: none;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) :is(.focus-connection-settings, .focus-appearance-settings) > summary::after {
+  content: "+";
+  flex: 0 0 22px;
+  color: var(--lime);
+  font-size: 21px;
+  font-weight: 500;
+  line-height: 1;
+  text-align: center;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) :is(.focus-connection-settings, .focus-appearance-settings)[open] > summary {
+  border-bottom: 1px solid #2e3b53;
+  border-radius: 13px 13px 0 0;
+  background: #192337;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) :is(.focus-connection-settings, .focus-appearance-settings)[open] > summary::after {
+  content: "−";
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) :is(.focus-connection-settings, .focus-appearance-settings) > summary:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: -3px;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) .focus-connection-settings :is(.api-panel, .monitor-panel) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  margin: 12px;
+  padding: 14px;
+  border-color: #34435e;
+  border-radius: 11px;
+  background: #162032;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) .focus-connection-settings :is(.api-panel, .monitor-panel) h2 {
+  margin-top: 6px;
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) .focus-connection-settings :is(.api-panel, .monitor-panel) p {
+  flex-basis: auto;
+  max-width: none;
+  margin: 5px 0 0;
+  font-size: 11px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) .focus-connection-settings :is(.api-controls, .monitor-controls) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  width: 100%;
+  max-width: none;
+  gap: 8px;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) .focus-connection-settings :is(.api-controls, .monitor-controls) button {
+  min-height: 38px;
+  padding: 9px 12px;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) .focus-connection-settings .monitor-controls label {
+  align-items: flex-start;
+  line-height: 1.6;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) .focus-connection-settings .monitor-controls input {
+  flex-shrink: 0;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) .focus-connection-settings #api-provider {
+  overflow-wrap: anywhere;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) .focus-appearance-settings .pattern-bar {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) .focus-appearance-settings .pattern {
+  min-width: 0;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) .focus-appearance-settings .pattern strong {
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: .05em;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) .focus-appearance-settings .pattern small {
+  font-size: 9px;
+  line-height: 1.6;
+  white-space: normal;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) .focus-appearance-settings .intensity-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 4px 16px 16px;
+  border: 0;
+  font-size: 12px;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) #settings-dialog select {
+  max-width: 100%;
+  min-height: 38px;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) #settings-dialog .settings-note {
+  margin-top: 16px;
+}
+
+body[data-view="focus"]:not([data-showcase-view="true"]) #settings-dialog .dialog-done {
+  margin-top: 20px;
+}
