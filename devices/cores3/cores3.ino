@@ -231,7 +231,7 @@ bool parseSnapshot(const String& body, Snapshot& result) {
   result.continuousHoldMs = doc["continuous_hold_ms"].as<uint32_t>();
   result.requiredHoldMs = doc["required_hold_ms"].as<uint32_t>();
   result.nextCaptureMs = doc["next_capture_after_ms"].as<uint32_t>();
-  if (result.requiredHoldMs != 5000) return false;
+  if (result.requiredHoldMs == 0 || result.requiredHoldMs > 86400000UL) return false;
   // millis() comparisons require a delay below half its uint32_t range.
   if (result.nextCaptureMs > 86400000UL) return false;
   return !result.notify || !result.notificationId.isEmpty();
@@ -349,6 +349,11 @@ bool captureJpeg(const Command& command, uint8_t** jpeg, size_t* length, String&
 
 void showSnapshot(const Command& command, const Snapshot& snapshot, String& lastNotification) {
   if (!isCurrent(command)) return;
+  Serial.printf("[focus] snapshot uptime_ms=%lu state=%s hold_ms=%lu required_ms=%lu notify=%d provider=%s\n",
+                static_cast<unsigned long>(millis()), snapshot.state.c_str(),
+                static_cast<unsigned long>(snapshot.continuousHoldMs),
+                static_cast<unsigned long>(snapshot.requiredHoldMs), snapshot.notify,
+                snapshot.mock ? "mock" : "openai");
   if (snapshot.state == "ended") {
     finishLocally(command);
     publish(command, "ENDED", "Press START for a new session", snapshot.mock);

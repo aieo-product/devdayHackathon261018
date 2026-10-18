@@ -9,6 +9,13 @@ build/
 .pio/
 *.bin
 *.elf
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+dist/
+agents.local.md
+.hf/
 .dev.vars
 .dev.vars.*
 !.dev.vars.example
