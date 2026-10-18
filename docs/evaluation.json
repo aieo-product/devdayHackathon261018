@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.1.0",
+  "schema_version": "1.2.0",
   "document_type": "hackathon_evidence_summary",
   "language": "ja",
   "as_of": "2026-10-18",
@@ -17,7 +17,9 @@
     "demo_video_url": null,
     "submission_status": "receipt_unverified",
     "public_mcp_url": "https://focus-events-20261018.take-otani.workers.dev/mcp",
-    "team_name": null
+    "team_name": null,
+    "default_branch": "main",
+    "source_url": "https://github.com/aieo-product/devdayHackathon261018/tree/main"
   },
   "versions": {
     "current_api": {
@@ -39,10 +41,32 @@
       "pull_request_url": "https://github.com/aieo-product/devdayHackathon261018/pull/10"
     },
     "verification_provenance": {
-      "execution": "implementation_owner_records_not_rerun_by_documentation_update",
+      "execution": "automated_suites_rerun_during_main_integration; live_and_physical_results_from_implementation_owner_records",
       "historical_reachy_hold_ms": 5000,
       "historical_reachy_cooldown_ms": 60000,
-      "historical_reachy_proves_current_two_second_physical_test": false
+      "historical_reachy_proves_current_two_second_physical_test": false,
+      "local_runtime": {
+        "node": "26.8.2",
+        "npm": "11.19.1",
+        "platform": "macOS arm64",
+        "worker_dependency_resolution": "global_fallback",
+        "miniflare": "5.20260804.1-alpha",
+        "esbuild": "0.28.1"
+      },
+      "reachy_python_rerun": false
+    },
+    "integration": {
+      "branch": "main",
+      "merged_source_commit": "d8e95c6eb96fb4c914eb81d465294680720d1d5c",
+      "locally_tested_commit": "b349cc95fcf062c673a3fb08e4d73dea4c72071e",
+      "pull_requests": [
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ]
     }
   },
   "ai_integration": {
@@ -138,14 +162,16 @@
       "command": "npm test",
       "passed": 37,
       "failed": 0,
-      "mode": "unit_and_mock"
+      "mode": "unit_and_mock",
+      "execution": "rerun_during_main_integration"
     },
     {
       "id": "current_worker_tests",
       "command": "npm run test:worker",
       "passed": 1,
       "failed": 0,
-      "mode": "local_runtime_sqlite"
+      "mode": "local_runtime_sqlite",
+      "execution": "rerun_during_main_integration"
     },
     {
       "id": "current_mac_tests",
@@ -155,7 +181,8 @@
       "parts": {
         "proxy": 19,
         "remote_controller": 32
-      }
+      },
+      "execution": "rerun_during_main_integration"
     },
     {
       "id": "current_events_tests",
@@ -168,7 +195,8 @@
         "broker": 17,
         "devices": 16,
         "miniflare_integration": 7
-      }
+      },
+      "execution": "rerun_during_main_integration"
     },
     {
       "id": "current_automated_total",
@@ -180,7 +208,8 @@
         "current_mac_tests",
         "current_events_tests"
       ],
-      "includes_reachy_python_tests": false
+      "includes_reachy_python_tests": false,
+      "execution": "rerun_during_main_integration"
     },
     {
       "id": "live_events_smoke",

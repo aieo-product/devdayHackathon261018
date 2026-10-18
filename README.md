@@ -20,6 +20,25 @@ tags:
 
 **評価資料:** [評価軸と検証の根拠](docs/evaluation.md) · [提出用説明文](docs/submission.md) · [3分デモ台本・起動手順](docs/demo.md) · [機械可読サマリー](docs/evaluation.json)
 
+## 統合ブランチと収録内容
+
+**開発・提出の基準は `main` です。** 既存の `feat/shared-focus-api` に統合された変更と評価資料をまとめています。未マージの作業ブランチや、各端末の未コミット設定は含めません。
+
+| 統合済みの変更 | 内容 |
+| --- | --- |
+| [PR #4](https://github.com/aieo-product/devdayHackathon261018/pull/4)・[PR #5](https://github.com/aieo-product/devdayHackathon261018/pull/5) | Cloudflare共通API、永続化、実推論の診断 |
+| [PR #6](https://github.com/aieo-product/devdayHackathon261018/pull/6) | Mac確認UI、2秒保持、通知後も繰り返し検知 |
+| [PR #8](https://github.com/aieo-product/devdayHackathon261018/pull/8) | Reachy Mini本体アプリ、反応・音声、配布設定 |
+| [PR #10](https://github.com/aieo-product/devdayHackathon261018/pull/10) | 独立Events Worker、MCP Events、Mac監視の遠隔ON/OFF |
+| [PR #9](https://github.com/aieo-product/devdayHackathon261018/pull/9) | 評価根拠、提出原稿、デモ台本、機械可読JSON |
+
+```sh
+git clone --branch main https://github.com/aieo-product/devdayHackathon261018.git
+cd devdayHackathon261018
+```
+
+既存の作業ディレクトリを更新するときは、未コミット変更を保存してから `git fetch origin`、`git switch main`、`git pull --ff-only` を使います。mainを初めて取得する場合は `git switch --track origin/main` で作成します。
+
 ## 公開成果物と評価の入口
 
 | 入口 | 確認できる内容 |
@@ -30,6 +49,8 @@ tags:
 | [Mac確認UI](tools/mac-camera-check/README.md) | カメラ→共通API→画面通知、遠隔ON/OFF。起動後は `http://127.0.0.1:3000` |
 | [Reachy本体アプリ](src/reachy_focus/) / [実機検証記録](docs/reachy/validation.md) | 本体カメラと公式fear1の動作・音声。導入手順は本README後半 |
 | [公開リポジトリ](https://github.com/aieo-product/devdayHackathon261018) | ソース、テスト、評価資料 |
+
+MCP・遠隔監視の追加仕様は[リポジトリの共通API仕様書](cloudflare/API仕様書.md)が最新です。公開 `/docs` はWorkerの最終配備時点の文書であり、資料更新だけでは差し替わりません。
 
 `/v1/*`の画像判定にはチームから受け取るアプリトークンが必要です。OpenAIキーはサーバー専用です。**公開操作UI・デモ動画・提出受付のURLは未確認**で、localhostやReachyのLAN内URLは外部の評価者が直接開ける提出URLにはなりません。公開APIのhealthは設定状態の確認であり、画像認識精度を証明しません。
 
@@ -51,7 +72,7 @@ tags:
 
 ## 実装・検証済みの範囲
 
-確認日: **2026-10-18（JST）**。下記は実装担当の検証記録を集約したもので、資料編集時に全試験を再実行したものではありません。
+確認日: **2026-10-18（JST）**。API・Worker・Mac・Eventsの自動テストはmain整備時にも再実行しています。公開API・仮想カメラ・物理端末の結果は実装担当の記録であり、今回再撮影したものではありません。
 
 | 対象 | 確認済み | 残っている確認 |
 | --- | --- | --- |
@@ -59,6 +80,7 @@ tags:
 | Macの2秒・繰り返し通知 | Chrome仮想カメラ＋実OpenAIで同一セッション2回通知。保持2534ms / 2386ms | 仮想入力の結果を物理カメラの再試験と混同しない |
 | MCP Events・監視ON/OFF | 公開Events疎通12項目、仮想カメラ＋実APIのブラウザE2E 7項目通過。通知2件の履歴一致、遠隔OFF後の撮影停止・適用確認 | 実dotsのOAuth接続・購読・通知、Reachy/CoreS3の遠隔監視アダプター |
 | Reachy Mini Wireless | 本体実画像→公開API→5313ms保持検知→fear1の動作・音声→時間終了を確認 | この実機記録は旧5秒条件。現行2秒の実機再試験、ページ/Macを閉じた単独継続は未確認 |
+| Reachy 0.2.9の追加機能 | cheerful1、日本語声かけ、10/20/30秒の待機リズム、リアクション中断時の姿勢復帰を実装。担当記録にPython41件と後続CI成功 | 版ごとの実機確認範囲は[Reachy記録](docs/reachy/validation.md)を参照。Python試験は今回の157件に含まない |
 | CoreS3 | ビルド、USB書込み、停止状態での起動。公開APIの画像なし開始/終了で2000msを確認 | 本体からの画像送信・実判定・ビープを通す一連動作 |
 
 詳しい試験条件・制約は[評価資料](docs/evaluation.md)、端末ごとの記録は[Reachy](docs/reachy/validation.md)・[CoreS3](devices/cores3/README.md)を参照してください。検知確率1.0はモデルの出力値であり、認識精度100%を意味しません。
@@ -122,7 +144,7 @@ OpenAI APIキーは共通APIサーバーだけが保持し、Reachyへ設定し�
 - `next_capture_after_ms` に従い、応答後に固定1秒や3秒を追加しない。長辺640px以下の生JPEG、1MiB以下、一意の `X-Frame-Id` で送信する。同時送信は1件のみ。
 - **新しいフレーム応答**の `notify: true` だけを消費し、`notification_id` で二重実行を防ぐ。GET・control・画面再描画からは通知しない。
 - `continuous_hold_ms` はサーバーの確認済み値だけを表示する。時間経過で画面側の進捗を増やさない。
-- 一時停止・終了はHTTPの完了を待つ前に、本体の撮影・通知・待機アクションを止める。停止要求が失敗しても本体は停止を維持し、遅延した画像応答を捨てる。
+- 一時停止・終了はHTTPの完了を待つ前に、本体の撮影・通知リアクション・予約音声を止める。停止要求が失敗しても観測停止を維持し、遅延した画像応答を捨てる。待機中の小さな動作はアプリ停止まで続く。
 - 集中タイマーは開始リクエスト時から計測し、一時停止中も進む。期限で本体を停止し、サーバーへ終了要求を送る。終了済みセッションは新規に開始する。
 - APIの `provider: mock` は画像解析を行わない。操作画面にmock/openaiを明示する。HTTP 200でも `state: unknown` なら判定失敗として扱い、通知しない。
 - 起動時にモーターを有効にし、2秒かけて顔を起こす。アプリ実行中は、アンテナと頭の小さな呼吸動作を続ける（モーションのチェックボックスなし）。

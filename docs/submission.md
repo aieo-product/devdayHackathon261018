@@ -31,7 +31,7 @@
 | OpenAPI | https://focus-shared-api-20261018.take-otani.workers.dev/openapi.json |
 | 公開成果物（Events MCP） | https://focus-events-20261018.take-otani.workers.dev/mcp （OAuth認証付き） |
 | Events稼働確認 | https://focus-events-20261018.take-otani.workers.dev/health |
-| ソース | https://github.com/aieo-product/devdayHackathon261018 |
+| ソース（統合ブランチ main） | https://github.com/aieo-product/devdayHackathon261018/tree/main |
 | API・連携の共有仕様 | [共通API仕様書](../cloudflare/API仕様書.md)、[Events手順](../cloudflare-events/README.md) |
 | 評価根拠 | [evaluation.md](evaluation.md)、[evaluation.json](evaluation.json)、[Reachy実機記録](reachy/validation.md) |
 | デモ手順 | [demo.md](demo.md)、[Mac確認UI](../tools/mac-camera-check/README.md) |
@@ -41,8 +41,8 @@
 
 ## 評価者へ伝える実装・検証範囲
 
-- Mac確認UI・2秒判定とEvents連携のコード、起動・試験手順をリポジトリで共有しています。実装・検証の根拠は[evaluation.md](evaluation.md)で確認し、提出時のコミットを確定してください。
-- 自動テストは計157件通過（API・クライアント37、既存Worker 1、Events 68、Mac 51）。別途、公開Events APIの疎通12項目、仮想カメラ＋実判定API＋公開Events WorkerのブラウザE2E 7項目が通過しています。資料編集時の再実行ではなく、実装担当の記録です。
+- Mac確認UI・2秒判定・Reachy実装・Events連携と評価資料を `main` に統合しています。実装・検証の根拠は[evaluation.md](evaluation.md)で確認し、提出時にはmainのコミットを記録してください。
+- 自動テストはmain整備時の再実行で計157件通過（API・クライアント37、既存Worker 1、Events 68、Mac 51）。別途、担当記録として公開Events APIの疎通12項目、仮想カメラ＋実判定API＋公開Events WorkerのブラウザE2E 7項目が通過しています。公開環境とカメラの試験は今回再実行していません。
 - E2Eでは異なる通知IDの2件がOAuthのイベント履歴に届き、画像を含まないこと、遠隔OFF後にカメラトラックと送信が止まり端末の実状態がOFFになることを確認しました。実dotsの通知確認とは区別します。
 - Reachyの実機記録は当時の5秒保持で5313msを確認し、fear1の動作・音声とタイマー終了まで確認したものです。現行2秒条件や新しい遠隔ON/OFFを実機で再確認したという主張ではありません。
 - `health`は設定確認です。実AIの成功は[写真による試験](https://github.com/aieo-product/devdayHackathon261018/issues/3)、[Mac仮想カメラの試験](https://github.com/aieo-product/devdayHackathon261018/pull/6)、[Eventsの検証記録](../cloudflare-events/README.md#検証と残っている確認)を参照してください。

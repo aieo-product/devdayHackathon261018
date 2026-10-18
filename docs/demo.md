@@ -6,10 +6,10 @@
 
 前提: Node.js 22.9以上、対応ブラウザとカメラ、ネット接続、チームが共有する`FOCUS_API_TOKEN`。画像はMac内のローカルサーバーから公開Workerを経由してOpenAIへ送られます。カメラは本人が開始するまで有効になりません。
 
-既存の作業を変更しないよう、別ディレクトリへ提出版を取得します。以下はMac確認UI・Events連携を含む統合後のデフォルトブランチ向け手順です。
+既存の作業を変更しないよう、別ディレクトリへ提出版を取得します。以下はMac確認UI・Events連携・Reachy実装を統合した `main` 向けの手順です。
 
 ```sh
-git clone https://github.com/aieo-product/devdayHackathon261018.git focus-demo
+git clone --branch main https://github.com/aieo-product/devdayHackathon261018.git focus-demo
 cd focus-demo
 ```
 
@@ -108,7 +108,7 @@ dotsへ依頼する例:
 
 ## 参照できる試験結果とコマンド
 
-実装担当による2026-10-18の結果です。この資料の編集時に同じ試験を再実行したものではありません。
+2026-10-18の結果です。4つの自動テストコマンドはmain整備時にも再実行しました。公開API、ブラウザE2E、実機の記録は実装担当によるもので、今回それらの試験は再実行していません。
 
 | 試験 | 確認結果 |
 | --- | --- |
