@@ -1,0 +1,15 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "focus-events-20261018",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "durable_objects": { "bindings": [{ "name": "FOCUS_EVENTS", "class_name": "FocusEventsStore" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FocusEventsStore"] }],
+  "vars": {
+    "PUBLIC_ORIGIN": "https://focus-events-20261018.take-otani.workers.dev",
+    "MCP_CALLBACK_HOSTS": "chatgpt.com,chat.openai.com,api.openai.com"
+  },
+  "observability": { "enabled": false }
+}
