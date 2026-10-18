@@ -16,7 +16,7 @@ tags:
 
 作業中についスマホを手に取る人のための、カメラとAIを使った集中支援プロトタイプです。**OpenAI Decisions APIでスマホ保持と手元の可視性を判断し、継続保持を確認したら端末が声・画面・動きで知らせます。** 本人が開始・一時停止・終了を選べます。集中力やADHDを診断するものではありません。
 
-現行の共通APIは **2秒保持・通知後のクールダウンなし**。Mac確認UI、Reachy Mini本体アプリ、CoreS3クライアントを同じリポジトリで開発しています。別のEvents WorkerでMCPイベントと監視ON/OFFを実装し、仮想カメラから公開APIまでの動作を確認しました。実dotsアカウントへの接続・通知は未確認です。
+現行の共通APIは **2秒保持・通知後のクールダウンなし**。DOTSフロント、Mac確認UI、Reachy Mini本体アプリ、CoreS3クライアントを同じリポジトリで開発しています。別のEvents WorkerでMCPイベントと監視ON/OFFを実装し、仮想カメラから公開APIまでの動作を確認しました。実dotsアカウントへの接続・通知は未確認です。
 
 **評価資料:** [評価軸と検証の根拠](docs/evaluation.md) · [提出用説明文](docs/submission.md) · [3分デモ台本・起動手順](docs/demo.md) · [機械可読サマリー](docs/evaluation.json)
 
@@ -31,6 +31,7 @@ tags:
 | [PR #8](https://github.com/aieo-product/devdayHackathon261018/pull/8) | Reachy Mini本体アプリ、反応・音声、配布設定 |
 | [PR #10](https://github.com/aieo-product/devdayHackathon261018/pull/10) | 独立Events Worker、MCP Events、Mac監視の遠隔ON/OFF |
 | [PR #11](https://github.com/aieo-product/devdayHackathon261018/pull/11) | Reachyの集中中ダンスと保持判定による即時中断 |
+| [PR #12](https://github.com/aieo-product/devdayHackathon261018/pull/12) | DOTSフロント、トースト・音・小窓・macOS補助表示、停止後の遅延通知対策 |
 | [PR #9](https://github.com/aieo-product/devdayHackathon261018/pull/9) | 評価根拠、提出原稿、デモ台本、機械可読JSON |
 
 ```sh
@@ -47,6 +48,7 @@ cd devdayHackathon261018
 | [共通判定API](https://focus-shared-api-20261018.take-otani.workers.dev/) | APIと仕様への入口。操作画面ではありません |
 | [公開仕様書](https://focus-shared-api-20261018.take-otani.workers.dev/docs) / [OpenAPI](https://focus-shared-api-20261018.take-otani.workers.dev/openapi.json) | 認証不要で閲覧できるHTTP契約・状態・2秒判定条件 |
 | [Events MCP](https://focus-events-20261018.take-otani.workers.dev/mcp) / [Events手順](cloudflare-events/README.md) | OAuthで接続するイベント・端末制御API。ブラウザで開く操作画面ではありません |
+| [DOTSフロント](focus-dopa-preview/README.md) | キャラクター・音・トースト・小窓。`npm run start:front` → `http://127.0.0.1:4327`。カメラ不要の33秒デモあり |
 | [Mac確認UI](tools/mac-camera-check/README.md) | カメラ→共通API→画面通知、遠隔ON/OFF。起動後は `http://127.0.0.1:3000` |
 | [Reachy本体アプリ](src/reachy_focus/) / [実機検証記録](docs/reachy/validation.md) | 本体カメラと公式fear1の動作・音声。導入手順は本README後半 |
 | [公開リポジトリ](https://github.com/aieo-product/devdayHackathon261018) | ソース、テスト、評価資料 |
@@ -75,15 +77,16 @@ Reachyのダンス中は例外として、最初の新しいスマホ保持判�
 
 ## 実装・検証済みの範囲
 
-確認日: **2026-10-18（JST）**。API・Worker・Mac・Eventsの自動テストはmain整備時にも再実行しています。公開API・仮想カメラ・物理端末の結果は実装担当の記録であり、今回再撮影したものではありません。
+確認日: **2026-10-18（JST）**。API・Worker・Mac・Events・DOTSフロントの自動テストはmain整備時にも再実行しています。公開API・仮想カメラ・物理端末の結果は実装担当の記録であり、今回再撮影したものではありません。
 
 | 対象 | 確認済み | 残っている確認 |
 | --- | --- | --- |
-| API・Worker・Mac・Events | 自動テスト計157件（API/クライアント37、既存Worker1、Mac51、Events68）通過 | 実環境の遅延分布・認識精度の統計評価 |
+| API・Worker・Mac・Events・DOTSフロント | 自動テスト計236件（API/クライアント37、既存Worker1、Mac51、Events68、フロント79）通過 | 実環境の遅延分布・認識精度の統計評価 |
+| DOTSフロント | カメラ不要の演出デモ、実カメラ送信と `observing` 応答、小窓・macOS補助表示の担当記録 | 実物スマホ保持→陽性通知、OSトーストの実表示、長時間バックグラウンド動作は未確認 |
 | Macの2秒・繰り返し通知 | Chrome仮想カメラ＋実OpenAIで同一セッション2回通知。保持2534ms / 2386ms | 仮想入力の結果を物理カメラの再試験と混同しない |
 | MCP Events・監視ON/OFF | 公開Events疎通12項目、仮想カメラ＋実APIのブラウザE2E 7項目通過。通知2件の履歴一致、遠隔OFF後の撮影停止・適用確認 | 実dotsのOAuth接続・購読・通知、Reachy/CoreS3の遠隔監視アダプター |
 | Reachy Mini Wireless | 本体実画像→公開API→5313ms保持検知→fear1の動作・音声→時間終了を確認 | この実機記録は旧5秒条件。現行2秒の実機再試験、ページ/Macを閉じた単独継続は未確認 |
-| Reachy 0.3.0の追加機能 | 10秒の非保持でdance1、最初の保持判定でダンス中断・fear1へ切替。cheerful1、日本語声かけ、基準姿勢復帰も収録。担当記録にPython47件成功 | ダンス中の実画像検知と動きの見た目は未確認。[変更と試験範囲](docs/reachy/dance.md)。Python試験は今回の157件に含まない |
+| Reachy 0.3.0の追加機能 | 10秒の非保持でdance1、最初の保持判定でダンス中断・fear1へ切替。cheerful1、日本語声かけ、基準姿勢復帰も収録。担当記録にPython47件成功 | ダンス中の実画像検知と動きの見た目は未確認。[変更と試験範囲](docs/reachy/dance.md)。Python試験は今回の236件に含まない |
 | CoreS3 | ビルド・USB書込み・起動に加え、実画像5枚を送りスマホ保持を2回検出した担当報告あり。HTTPS接続再利用の改善を統合 | 観測間隔が2.5秒を超えて保持時間がリセットし、通知・ビープまで未達。[最新試験記録](devices/cores3/README.md#実画像試験の担当報告2026-10-18) |
 
 詳しい試験条件・制約は[評価資料](docs/evaluation.md)、端末ごとの記録は[Reachy](docs/reachy/validation.md)・[CoreS3](devices/cores3/README.md)を参照してください。検知確率1.0はモデルの出力値であり、認識精度100%を意味しません。
@@ -98,6 +101,7 @@ npm test
 npm run test:worker
 npm run test:mac-check
 npm run test:events
+npm run test:front
 ```
 
 通常の自動テストは外部のOpenAIや実カメラを使いません。MacデモはGit管理外の `cloudflare/.env.connection` に `FOCUS_API_URL` と `FOCUS_API_TOKEN` を設定し、次を実行します。Eventsの追加設定とペアリングは[Mac手順](tools/mac-camera-check/README.md)にあります。
@@ -110,7 +114,7 @@ npm run start:mac-check
 
 ## DOTSフロントの起動とレビュー
 
-PCブラウザ向けの追加フロントを `focus-dopa-preview/` に用意しました。DOTS1体、動くトースト、警告音、全画面リリック、Chromeの小窓、macOS用のデスクトップ表示補助アプリを含みます。
+PCブラウザ向けの追加フロントを `focus-dopa-preview/` に用意しました。このDOTSは独自のキャラクター画面で、ChatGPT dotsへのMCP接続・購読・通知とは別です。DOTS1体、動くトースト、警告音、全画面リリック、Chromeの小窓、macOS用のデスクトップ表示補助アプリを含みます。
 
 ```sh
 npm run test:front
@@ -121,7 +125,7 @@ npm run start:front
 
 現行の共通APIは2秒保持・通知クールダウンなしです。[API仕様書](cloudflare/API仕様書.md)と[引き継ぎ文書](focus-dopa-preview/docs/HANDOFF.md)を参照してください。このフロントは `notify` と `next_capture_after_ms` に従い、保持時間や通知待機時間を独自に追加しません。
 
-実カメラの送信と `observing` 応答は確認済みですが、スマホの実物保持からの陽性通知は未確認です。詳細は [フロントREADME](focus-dopa-preview/README.md)、[引き継ぎとマージ手順](focus-dopa-preview/docs/HANDOFF.md)、[アセットの由来](focus-dopa-preview/ASSETS.md)に記載しています。
+実カメラの送信と `observing` 応答は担当が確認済みですが、スマホの実物保持からの陽性通知は未確認です。ブラウザのOS通知は実装済み・実表示未確認です。DOTSフロントはタブ非表示でも有効なカメラを継続するため、終了時は画面の停止操作を使います。既存Mac確認UIは非表示時に撮影を止めます。詳細は [フロントREADME](focus-dopa-preview/README.md)、[引き継ぎとマージ手順](focus-dopa-preview/docs/HANDOFF.md)、[アセットの由来](focus-dopa-preview/ASSETS.md)に記載しています。
 
 ## データ・認証・制約
 
@@ -137,6 +141,7 @@ npm run start:front
 - [Node API](api/README.md) / [HTTP契約](docs/api-contract.md)
 - [Cloudflare Worker](cloudflare/README.md) / [API仕様書](cloudflare/API仕様書.md)
 - [Mac確認UI](tools/mac-camera-check/README.md) / [MCP Events・遠隔監視](cloudflare-events/README.md)
+- [DOTSフロント](focus-dopa-preview/README.md) / [引き継ぎ](focus-dopa-preview/docs/HANDOFF.md) / [素材の由来](focus-dopa-preview/ASSETS.md)
 - [CoreS3の導入と実機記録](devices/cores3/README.md)
 
 ## Reachy Mini本体アプリ：導入・運用

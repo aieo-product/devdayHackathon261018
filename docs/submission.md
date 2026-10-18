@@ -18,6 +18,8 @@
 
 特徴は、AIによる判断を共通化し、PCの画面通知・CoreS3の音・Reachy Miniの反応へ接続する構成です。Reachyは実画像の判定からfear1の動作・音声まで実機で確認済みです。この実機記録は当時の5秒保持仕様で、現行2秒仕様での再試験とは区別しています。Reachy 0.3.0では非保持が10秒続いたらダンスし、最初の保持判定で中断する機能を追加しましたが、その実機切替は未確認です。CoreS3は実画像の送信と保持の認識まで担当が確認しました。通信間隔超過により通知は発生せず、通知音までの確認は残っています。
 
+PC向けにはDOTSキャラクターの集中タイマー、動くトースト、警告音、Chromeの小窓、macOSの補助表示を実装しました。カメラやAPIを使わず約33秒で見られる10シーンデモもあります。実カメラ送信と `observing` 応答は確認済みですが、このフロントでの実物スマホ保持から通知までの一連動作は未確認です。このキャラクター画面はChatGPT dotsのMCP連携とは別です。
+
 さらに、独立したEvents Workerを公開配備し、検知メタデータのMCP Events配信と、Web画面・dotsからの端末監視ON/OFF用APIを実装しました。Macでは利用者が遠隔操作を許可した間だけONを受け付けます。仮想カメラと公開APIを使い、遠隔ON→2回の検知→イベント履歴への反映→遠隔OFFと停止報告まで確認しました。実際のdotsアカウントでの接続・通知、物理カメラの遠隔操作、Reachy/CoreS3の遠隔制御アダプターは未確認または未実装です。
 
 集中時間の改善や認識精度の統計評価はまだ行っていません。ADHDや集中力の診断ではなく、本人が開始・停止できる行動へのフィードバックを提案します。
@@ -34,15 +36,15 @@
 | ソース（統合ブランチ main） | https://github.com/aieo-product/devdayHackathon261018/tree/main |
 | API・連携の共有仕様 | [共通API仕様書](../cloudflare/API仕様書.md)、[Events手順](../cloudflare-events/README.md) |
 | 評価根拠 | [evaluation.md](evaluation.md)、[evaluation.json](evaluation.json)、[Reachy実機記録](reachy/validation.md) |
-| デモ手順 | [demo.md](demo.md)、[Mac確認UI](../tools/mac-camera-check/README.md) |
-| 公開操作UI URL | 未確認。`http://127.0.0.1:3000`はMac内の確認UIであり、提出用の公開URLではない |
+| デモ手順 | [demo.md](demo.md)、[DOTSフロント](../focus-dopa-preview/README.md)、[Mac確認UI](../tools/mac-camera-check/README.md) |
+| 公開操作UI URL | 未確認。`http://127.0.0.1:3000` / `:4327`はMac内の画面であり、提出用の公開URLではない |
 | 公開デモ動画・スクリーンショット | 公開リンクは未確認。開発時のローカル保存画像を公開資料へ採用する場合は、仮想カメラ入力であることを表示する |
 | チーム名・メンバー表記 | 提出者が最終確認。未確認のチーム名・個人名は補完しない |
 
 ## 評価者へ伝える実装・検証範囲
 
-- Mac確認UI・2秒判定・Reachy実装・Events連携と評価資料を `main` に統合しています。実装・検証の根拠は[evaluation.md](evaluation.md)で確認し、提出時にはmainのコミットを記録してください。
-- 自動テストはmain整備時の再実行で計157件通過（API・クライアント37、既存Worker 1、Events 68、Mac 51）。別途、担当記録として公開Events APIの疎通12項目、仮想カメラ＋実判定API＋公開Events WorkerのブラウザE2E 7項目が通過しています。公開環境とカメラの試験は今回再実行していません。
+- DOTSフロント・Mac確認UI・2秒判定・Reachyダンス実装・Events連携と評価資料を `main` に統合しています。実装・検証の根拠は[evaluation.md](evaluation.md)で確認し、提出時にはmainのコミットを記録してください。
+- 自動テストはmain整備時の再実行で計236件通過（API・クライアント37、既存Worker 1、Events 68、Mac 51、DOTSフロント79）。別途、担当記録として公開Events APIの疎通12項目、仮想カメラ＋実判定API＋公開Events WorkerのブラウザE2E 7項目が通過しています。公開環境とカメラの試験は今回再実行していません。
 - E2Eでは異なる通知IDの2件がOAuthのイベント履歴に届き、画像を含まないこと、遠隔OFF後にカメラトラックと送信が止まり端末の実状態がOFFになることを確認しました。実dotsの通知確認とは区別します。
 - Reachyの実機記録は当時の5秒保持で5313msを確認し、fear1の動作・音声とタイマー終了まで確認したものです。現行2秒条件や新しい遠隔ON/OFFを実機で再確認したという主張ではありません。
 - `health`は設定確認です。実AIの成功は[写真による試験](https://github.com/aieo-product/devdayHackathon261018/issues/3)、[Mac仮想カメラの試験](https://github.com/aieo-product/devdayHackathon261018/pull/6)、[Eventsの検証記録](../cloudflare-events/README.md#検証と残っている確認)を参照してください。

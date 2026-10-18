@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.2.0",
+  "schema_version": "1.3.0",
   "document_type": "hackathon_evidence_summary",
   "language": "ja",
   "as_of": "2026-10-18",
@@ -32,7 +32,8 @@
         "cloudflare/README.md",
         "tools/mac-camera-check/README.md",
         "src/reachy_focus/"
-      ]
+      ],
+      "dots_frontend_in_repository": true
     },
     "events_deployment": {
       "url": "https://focus-events-20261018.take-otani.workers.dev",
@@ -59,7 +60,7 @@
     },
     "integration": {
       "branch": "main",
-      "merged_source_commit": "bc85f236739727b89e4070862cee9c3df9f768c7",
+      "merged_source_commit": "df3c9ca336664d9bfe1ec0ee9240104d2c98c5cd",
       "locally_tested_commit": "b349cc95fcf062c673a3fb08e4d73dea4c72071e",
       "pull_requests": [
         4,
@@ -68,9 +69,11 @@
         8,
         9,
         10,
-        11
+        11,
+        12
       ],
-      "worker_events_retested_commit": "e13216439af2db6c09de1be784307fc00b064981"
+      "worker_events_retested_commit": "e13216439af2db6c09de1be784307fc00b064981",
+      "frontend_tested_commit": "9d0ba6563f1ea7a6b3ac16324f729028807989ea"
     }
   },
   "ai_integration": {
@@ -162,6 +165,24 @@
         "tools/mac-camera-check/README.md",
         "https://github.com/aieo-product/devdayHackathon261018/pull/10"
       ]
+    },
+    {
+      "id": "dots_frontend",
+      "status": "implemented_camera_upload_observing_reported_positive_notification_unverified",
+      "start_command": "npm run start:front",
+      "local_url": "http://127.0.0.1:4327",
+      "showcase_duration_seconds_approx": 33,
+      "showcase_scene_count": 10,
+      "showcase_uses_camera_or_api": false,
+      "chatgpt_dots_mcp_integration": false,
+      "os_notification_implemented": true,
+      "os_notification_display_verified": false,
+      "camera_continues_when_tab_hidden": true,
+      "evidence": [
+        "focus-dopa-preview/README.md",
+        "focus-dopa-preview/docs/HANDOFF.md",
+        "https://github.com/aieo-product/devdayHackathon261018/pull/12"
+      ]
     }
   ],
   "verification": [
@@ -207,14 +228,23 @@
       "execution": "rerun_during_main_integration"
     },
     {
+      "id": "current_frontend_tests",
+      "command": "npm run test:front",
+      "passed": 79,
+      "failed": 0,
+      "mode": "unit_and_mock",
+      "execution": "rerun_during_main_integration"
+    },
+    {
       "id": "current_automated_total",
-      "passed": 157,
+      "passed": 236,
       "failed": 0,
       "includes": [
         "current_api_client_tests",
         "current_worker_tests",
         "current_mac_tests",
-        "current_events_tests"
+        "current_events_tests",
+        "current_frontend_tests"
       ],
       "includes_reachy_python_tests": false,
       "execution": "rerun_during_main_integration"
@@ -381,7 +411,8 @@
     "CoreS3 physical image-to-inference-to-beep end-to-end verification remains incomplete.",
     "Reachy and CoreS3 adapters for Events remote monitoring control are not implemented.",
     "Image classification accuracy, real-world latency distributions and productivity benefits are not statistically measured.",
-    "A physical two-second notification deadline is not guaranteed."
+    "A physical two-second notification deadline is not guaranteed.",
+    "DOTS frontend real phone holding to positive notification, OS toast display and long-running background behavior remain unverified; its mascot is separate from ChatGPT dots MCP integration."
   ],
   "event": {
     "source_url": "https://luma.com/OpenAIDevDay2026CommunityHackathonTokyo",
