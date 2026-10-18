@@ -1,6 +1,48 @@
 import { DecisionError } from './errors.mjs';
 
-export function createProvider(config, fetchImpl = fetch) {
+const MAX_ERROR_BYTES = 16 * 1024;
+const ERROR_CODES = new Set([
+  'invalid_api_key', 'insufficient_quota', 'rate_limit_exceeded', 'model_not_found',
+  'context_length_exceeded', 'invalid_value', 'missing_required_parameter', 'unsupported_value',
+  'invalid_image', 'invalid_image_format', 'image_parse_error', 'image_too_large',
+  'server_error', 'account_deactivated', 'organization_deactivated', 'billing_hard_limit_reached',
+]);
+const ERROR_TYPES = new Set([
+  'invalid_request_error', 'authentication_error', 'permission_error',
+  'rate_limit_error', 'server_error', 'api_error', 'insufficient_quota',
+]);
+
+// Never forward upstream messages, headers, arbitrary codes, or request contents to logs.
+async function reportHttpFailure(response, onDiagnostic) {
+  let error;
+  let reader;
+  try {
+    reader = response.body?.getReader();
+    const chunks = [];
+    let size = 0;
+    while (reader) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_ERROR_BYTES) throw new Error('oversized_error');
+      chunks.push(value);
+    }
+    error = JSON.parse(Buffer.concat(chunks, size).toString('utf8'))?.error;
+  } catch {
+    // Missing, oversized, unreadable, and malformed bodies all produce unknown codes.
+  } finally {
+    try { await reader?.cancel(); } catch { /* Diagnostic cleanup is best effort. */ }
+  }
+  const diagnostic = {
+    event: 'openai_decision_error',
+    status: response.status,
+    code: ERROR_CODES.has(error?.code) ? error.code : 'unknown',
+    type: ERROR_TYPES.has(error?.type) ? error.type : 'unknown',
+  };
+  try { await onDiagnostic(diagnostic); } catch { /* Logging cannot change the public error. */ }
+}
+
+export function createProvider(config, fetchImpl = fetch, onDiagnostic = (event) => console.warn(JSON.stringify(event))) {
   if (config.provider === 'mock') {
     return {
       name: 'mock', configured: true,
@@ -32,7 +74,7 @@ export function createProvider(config, fetchImpl = fetch) {
         }),
       });
       if (!response.ok) {
-        await response.body?.cancel();
+        await reportHttpFailure(response, onDiagnostic);
         throw new DecisionError('provider_error');
       }
       let body;

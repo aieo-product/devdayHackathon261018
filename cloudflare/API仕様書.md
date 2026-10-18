@@ -230,6 +230,8 @@ X-Frame-Id: cores3-000001
 
 判定API自体の失敗は、多くの場合HTTP 200の`state: unknown`・`notify: false`として返します。HTTP成功を判定成功とみなさず、状態と理由を確認してください。
 
+上流の非2xx応答はサーバーログの `openai_decision_error` でHTTPステータスと許可した `code` / `type` だけを診断できます。未知の分類は `unknown`。キー・画像・上流メッセージ・ヘッダーはログに残さず、公開レスポンスは `provider_error` のままです。`401 / invalid_api_key` はOpenAI側でキーが認証されていないことを示します。Secretを更新後、`npm run smoke:worker` で両確率が数値として返ることまで確認してください。`/health` の `configured:true` だけでは認証成功を確認できません。
+
 ## JavaScriptクライアントの約束
 
 `clients/focus-client.mjs`の`FocusClient({baseUrl, token})`を使用できます。
