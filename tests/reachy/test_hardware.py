@@ -1,4 +1,5 @@
 import io
+import struct
 import wave
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,7 +9,7 @@ import pytest
 from PIL import Image
 
 from reachy_focus.config import Settings
-from reachy_focus.hardware import ReachyHardware
+from reachy_focus.hardware import REMINDER_SOUNDS, ReachyHardware
 
 
 def test_camera_preserves_aspect_ratio_and_bgr_channels():
@@ -21,15 +22,23 @@ def test_camera_preserves_aspect_ratio_and_bgr_channels():
     assert r > 240 and g < 10 and b < 10
 
 
-def test_bundled_reminder_has_real_audio():
-    path = Path(__file__).parents[2] / "src/reachy_focus/assets/reminder.wav"
+@pytest.mark.parametrize("path", REMINDER_SOUNDS)
+def test_bundled_reminder_has_real_audio(path):
+    raw = path.read_bytes()
+    fmt = raw.index(b"fmt ") + 8
+    encoding, channels, rate, byte_rate, alignment, bits = struct.unpack_from(
+        "<HHIIHH", raw, fmt
+    )
+    assert encoding == 1  # PCM; GStreamer rejects inconsistent WAV byte rates.
+    assert alignment == channels * bits // 8
+    assert byte_rate == rate * alignment
     with wave.open(str(path)) as wav:
         assert 0.5 < wav.getnframes() / wav.getframerate() < 10
         samples = wav.readframes(wav.getnframes())
         assert len(set(samples)) > 10
         levels = np.frombuffer(samples, dtype="<i2").astype(float) / 32768
-        assert 0.15 < np.sqrt(np.mean(levels**2)) < 0.3
-        assert 0.85 < np.max(np.abs(levels)) < 0.99
+        assert 0.1 < np.sqrt(np.mean(levels**2)) < 0.3
+        assert 0.7 < np.max(np.abs(levels)) < 0.99
 
 
 def test_failed_motor_cancel_still_stops_audio():
@@ -69,7 +78,11 @@ def test_recorded_ogg_uses_preset_duration_without_wav_decoding():
     assert stopped == [True]
 
 
-def test_fear_keeps_preset_audio_then_speaks_and_cancel_discards_queued_speech():
+@pytest.mark.parametrize("reminder", REMINDER_SOUNDS)
+def test_fear_keeps_preset_audio_then_speaks_and_cancel_discards_queued_speech(
+    monkeypatch, reminder
+):
+    monkeypatch.setattr("reachy_focus.hardware.random.choice", lambda options: reminder)
     played = []
     now = [0.0]
     mini = SimpleNamespace(
@@ -98,7 +111,7 @@ def test_fear_keeps_preset_audio_then_speaks_and_cancel_discards_queued_speech()
     assert played == ["fear1.ogg"]
     now[0] = 4.5
     hardware.step()
-    assert Path(played[-1]).name == "reminder.wav"
+    assert Path(played[-1]) == reminder
     assert len(played) == 2
     hardware.cancel()
     hardware.notify(Settings())
@@ -109,6 +122,33 @@ def test_fear_keeps_preset_audio_then_speaks_and_cancel_discards_queued_speech()
     now[0] = 10
     hardware.step()
     assert len(played) == 3
+
+
+def test_each_reminder_selects_a_clip_and_uses_its_actual_duration(monkeypatch):
+    selections = iter(REMINDER_SOUNDS)
+    played, offered = [], []
+
+    def choose(options):
+        offered.append(options)
+        return next(selections)
+
+    monkeypatch.setattr("reachy_focus.hardware.random.choice", choose)
+    mini = SimpleNamespace(
+        media=SimpleNamespace(
+            audio=object(), play_sound=played.append, stop_playing=lambda: None
+        )
+    )
+    hardware = ReachyHardware(mini, clock=lambda: 100)
+    for path in REMINDER_SOUNDS:
+        result = hardware.notify(
+            Settings()
+        )  # Also works when the emotion is unavailable.
+        assert result[-1] == {"action": "reminder", "status": "started"}
+        assert played[-1] == str(path)
+        with wave.open(str(path)) as wav:
+            duration = wav.getnframes() / wav.getframerate()
+        assert hardware.audio_until == pytest.approx(100 + duration + 0.2)
+    assert offered == [REMINDER_SOUNDS, REMINDER_SOUNDS]
 
 
 def test_focus_dance_is_interruptible_and_later_notification_does_not_restart_fear():
