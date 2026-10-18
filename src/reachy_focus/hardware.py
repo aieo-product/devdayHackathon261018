@@ -12,6 +12,7 @@ from PIL import Image
 EMOTIONS_DATASET = "pollen-robotics/reachy-mini-emotions-library"
 FEAR_MOVE = "fear1"
 HAPPY_MOVE = "cheerful1"
+DANCE_MOVE = "dance1"
 
 
 class ReachyHardware:
@@ -21,6 +22,9 @@ class ReachyHardware:
         self.camera_lock = threading.Lock()
         self.fear = None
         self.happy = None
+        self.dance = None
+        self.audio_enabled = True
+        self.last_reaction = None
         self.emotion = None
         self.returning = None
         self.motion = None
@@ -44,6 +48,8 @@ class ReachyHardware:
             actions.append("fear1")
         if self.happy is not None:
             actions.append(HAPPY_MOVE)
+        if self.dance is not None:
+            actions.append(DANCE_MOVE)
         return {"camera": self.mini.media.camera is not None, "actions": actions}
 
     def _idle_baseline(self):
@@ -69,19 +75,58 @@ class ReachyHardware:
         try:
             # The daemon preloads this official library. Playback uses its actual trajectory.
             moves = RecordedMoves(EMOTIONS_DATASET, token=False)
-            self.fear = moves.get(FEAR_MOVE)
-            self.happy = moves.get(HAPPY_MOVE)
         except Exception:
-            self.fear = (
-                None  # Capability explicitly reports that the preset is unavailable.
-            )
+            return  # Capabilities explicitly report unavailable presets.
+        for attr, name in (
+            ("fear", FEAR_MOVE),
+            ("happy", HAPPY_MOVE),
+            ("dance", DANCE_MOVE),
+        ):
+            try:
+                setattr(self, attr, moves.get(name))
+            except Exception:
+                setattr(self, attr, None)
 
     def configure(self, settings):
         self.idle_enabled = settings.motion_enabled
+        self.audio_enabled = settings.audio_enabled
+
+    def is_dancing(self):
+        return self.emotion is not None and self.emotion.get("kind") == DANCE_MOVE
+
+    def _start_emotion(self, move, kind, audio, speech=False):
+        self.cancel()
+        self.returning = None
+        self.last_reaction = kind
+        self.emotion = {
+            "move": move,
+            "kind": kind,
+            "started": self.clock(),
+            "head": self.mini.get_current_head_pose().copy(),
+            "antennas": list(self.mini.get_present_antenna_joint_positions()),
+            "sound_started": False,
+            "audio": audio,
+            "speech": speech,
+        }
 
     def set_focus_progress(self, seconds):
         # Increase the rhythm every ten confirmed seconds, reaching full energy at thirty.
         self.target_energy = min(1.0, max(0.0, math.floor(seconds / 10) / 3))
+        if seconds < 10 and self.is_dancing():
+            self.cancel()
+            return [{"action": DANCE_MOVE, "status": "cancelled"}]
+        if (
+            seconds >= 10
+            and self.idle_enabled
+            and self.dance is not None
+            and self.emotion is None
+            and self.returning is None
+            and not self.audio_until
+            and self.queued_speech is None
+        ):
+            self._start_emotion(self.dance, DANCE_MOVE, self.audio_enabled)
+            return [{"action": DANCE_MOVE, "status": "started"}]
+        return []
 
     def capture(self):
         with self.camera_lock:
@@ -104,19 +149,19 @@ class ReachyHardware:
         self.audio_until = self.clock() + duration + 0.2
 
     def notify(self, settings):
+        # A confirmed API notification must not restart a fear triggered by a dance interruption.
+        if self.last_reaction == FEAR_MOVE and (
+            self.emotion is not None
+            or self.queued_speech is not None
+            or self.audio_until
+        ):
+            return [{"action": FEAR_MOVE, "status": "already_playing"}]
         self.cancel()
         results = []
         if settings.motion_enabled and self.fear is not None:
-            self.returning = None
-            self.emotion = {
-                "move": self.fear,
-                "started": self.clock(),
-                "head": self.mini.get_current_head_pose().copy(),
-                "antennas": list(self.mini.get_present_antenna_joint_positions()),
-                "sound_started": False,
-                "audio": settings.audio_enabled,
-                "speech": True,
-            }
+            self._start_emotion(
+                self.fear, FEAR_MOVE, settings.audio_enabled, speech=True
+            )
             results.append({"action": FEAR_MOVE, "status": "started"})
         elif settings.motion_enabled:
             results.append({"action": FEAR_MOVE, "status": "unavailable"})
@@ -132,16 +177,7 @@ class ReachyHardware:
     def celebrate(self, settings):
         if self.happy is None:
             return [{"action": HAPPY_MOVE, "status": "unavailable"}]
-        self.cancel()
-        self.returning = None
-        self.emotion = {
-            "move": self.happy,
-            "started": self.clock(),
-            "head": self.mini.get_current_head_pose().copy(),
-            "antennas": list(self.mini.get_present_antenna_joint_positions()),
-            "sound_started": False,
-            "audio": settings.audio_enabled,
-        }
+        self._start_emotion(self.happy, HAPPY_MOVE, settings.audio_enabled)
         return [{"action": HAPPY_MOVE, "status": "started"}]
 
     def _emotion_step(self):
