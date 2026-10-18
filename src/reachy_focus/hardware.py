@@ -2,6 +2,7 @@
 
 import io
 import math
+import random
 import threading
 import time
 import wave
@@ -13,6 +14,10 @@ EMOTIONS_DATASET = "pollen-robotics/reachy-mini-emotions-library"
 FEAR_MOVE = "fear1"
 HAPPY_MOVE = "cheerful1"
 DANCE_MOVE = "dance1"
+REMINDER_SOUNDS = tuple(
+    Path(__file__).parent / "assets" / name
+    for name in ("reminder-1.wav", "reminder-2.wav")
+)
 
 
 class ReachyHardware:
@@ -148,6 +153,9 @@ class ReachyHardware:
         self.mini.media.play_sound(str(sound))
         self.audio_until = self.clock() + duration + 0.2
 
+    def _play_reminder(self):
+        self._play_sound(random.choice(REMINDER_SOUNDS))
+
     def notify(self, settings):
         # A confirmed API notification must not restart a fear triggered by a dance interruption.
         if self.last_reaction == FEAR_MOVE and (
@@ -168,7 +176,7 @@ class ReachyHardware:
         # Fear keeps its original sound and queues the Japanese reminder after it.
         if settings.audio_enabled and self.emotion is None:
             try:
-                self._play_sound(Path(__file__).parent / "assets" / "reminder.wav")
+                self._play_reminder()
                 results.append({"action": "reminder", "status": "started"})
             except Exception:
                 results.append({"action": "reminder", "status": "failed"})
@@ -204,9 +212,7 @@ class ReachyHardware:
                         if e.get("speech"):
                             self.queued_speech = self.audio_until
                     elif e.get("speech"):
-                        self._play_sound(
-                            Path(__file__).parent / "assets" / "reminder.wav"
-                        )
+                        self._play_reminder()
             head, antennas, body = move.evaluate(
                 min(t - transition, move.timestamps[-1] - 1e-6)
             )
@@ -269,7 +275,7 @@ class ReachyHardware:
             self.audio_until = 0
         if self.queued_speech is not None and self.clock() >= self.queued_speech:
             self.queued_speech = None
-            self._play_sound(Path(__file__).parent / "assets" / "reminder.wav")
+            self._play_reminder()
 
     def cancel(self):
         self.queued_speech = None

@@ -4,7 +4,7 @@ import zipfile
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
-required = {'reachy_focus/main.py', 'reachy_focus/static/index.html', 'reachy_focus/static/main.js', 'reachy_focus/assets/reminder.wav'}
+required = {'reachy_focus/main.py', 'reachy_focus/static/index.html', 'reachy_focus/static/main.js', 'reachy_focus/assets/reminder-1.wav', 'reachy_focus/assets/reminder-2.wav'}
 for path in [*sorted((root / 'dist').glob('*.whl')), *sorted((root / 'dist').glob('*.tar.gz'))]:
     if path.suffix == '.whl':
         with zipfile.ZipFile(path) as archive:
