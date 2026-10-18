@@ -1,4 +1,5 @@
 import io
+import struct
 import wave
 from pathlib import Path
 from types import SimpleNamespace
@@ -23,6 +24,14 @@ def test_camera_preserves_aspect_ratio_and_bgr_channels():
 
 @pytest.mark.parametrize("path", REMINDER_SOUNDS)
 def test_bundled_reminder_has_real_audio(path):
+    raw = path.read_bytes()
+    fmt = raw.index(b"fmt ") + 8
+    encoding, channels, rate, byte_rate, alignment, bits = struct.unpack_from(
+        "<HHIIHH", raw, fmt
+    )
+    assert encoding == 1  # PCM; GStreamer rejects inconsistent WAV byte rates.
+    assert alignment == channels * bits // 8
+    assert byte_rate == rate * alignment
     with wave.open(str(path)) as wav:
         assert 0.5 < wav.getnframes() / wav.getframerate() < 10
         samples = wav.readframes(wav.getnframes())
