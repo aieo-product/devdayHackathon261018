@@ -54,6 +54,51 @@ test('provider rejects missing credentials and HTTP failures without exposing up
   assert.equal(calls, 1);
 });
 
+test('HTTP diagnostics expose only status and allowlisted error categories', async () => {
+  for (const [status, code, type] of [
+    [400, 'invalid_value', 'invalid_request_error'],
+    [401, 'invalid_api_key', 'authentication_error'],
+    [403, 'model_not_found', 'permission_error'],
+    [404, 'model_not_found', 'invalid_request_error'],
+    [429, 'insufficient_quota', 'insufficient_quota'],
+    [500, 'server_error', 'server_error'],
+  ]) {
+    const logs = [];
+    const provider = createProvider({ provider: 'openai', openaiApiKey: 'private-api-key' }, async () => new Response(JSON.stringify({
+      error: { code, type, message: 'private-message', param: 'private-param', data: 'private-image' },
+      private: 'private-body',
+    }), { status, headers: { 'x-request-id': 'private-header' } }), (event) => logs.push(event));
+    await assert.rejects(provider.decide({ bytes: Buffer.from('private-image'), contentType: 'image/png' }), { code: 'provider_error', message: 'provider_error' });
+    assert.deepEqual(logs, [{ event: 'openai_decision_error', status, code, type }]);
+    assert.doesNotMatch(JSON.stringify(logs), /private/);
+  }
+});
+
+test('untrusted error categories and malformed or oversized error bodies are discarded', async () => {
+  const secret = 'private-api-key';
+  for (const body of [
+    JSON.stringify({ error: { code: secret, type: secret, message: secret } }),
+    JSON.stringify({ error: { code: { value: secret }, type: [secret] } }),
+    secret,
+    JSON.stringify({ error: { code: 'invalid_api_key', type: 'authentication_error', message: secret.repeat(2048) } }),
+  ]) {
+    const logs = [];
+    const provider = createProvider({ provider: 'openai', openaiApiKey: secret }, async () => new Response(body, { status: 401 }), (event) => logs.push(event));
+    await assert.rejects(provider.decide({ bytes: Buffer.alloc(0), contentType: 'image/png' }), { code: 'provider_error' });
+    assert.deepEqual(logs, [{ event: 'openai_decision_error', status: 401, code: 'unknown', type: 'unknown' }]);
+    assert.doesNotMatch(JSON.stringify(logs), /private/);
+  }
+});
+
+test('diagnostic read and logger failures cannot replace the public provider error', async () => {
+  for (const onDiagnostic of [() => { throw new Error('private-logger-error'); }, async () => { throw new Error('private-logger-error'); }]) {
+    const provider = createProvider({ provider: 'openai', openaiApiKey: 'private-api-key' }, async () => new Response(new ReadableStream({
+      start(controller) { controller.error(new Error('private-stream-error')); },
+    }), { status: 503 }), onDiagnostic);
+    await assert.rejects(provider.decide({ bytes: Buffer.alloc(0), contentType: 'image/png' }), { code: 'provider_error', message: 'provider_error' });
+  }
+});
+
 test('configuration requires authentication and rejects typo providers, wildcard CORS and invalid mock values', () => {
   assert.throws(() => readConfig({ DECISION_PROVIDER: 'mock' }));
   const base = { FOCUS_API_TOKEN: 'test' };
