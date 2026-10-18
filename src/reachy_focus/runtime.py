@@ -200,15 +200,6 @@ class Runtime:
             if self.closed:
                 return
             self._tick()
-            if hasattr(self.hardware, "set_focus_progress"):
-                self.hardware.set_focus_progress(
-                    self.session.focus_seconds if self.session.state == "running" else 0
-                )
-            try:
-                self.hardware.step()
-            except Exception as exc:
-                self._cancel_actions()
-                self.session.log("action_failed", reason=type(exc).__name__)
             s = self.session
             if self.pending is not None and self.pending.done():
                 future, generation = self.pending, self.pending_generation
@@ -220,15 +211,35 @@ class Runtime:
                         and generation == s.generation
                         and s.state == "running"
                     ):
+                        dancing = (
+                            hasattr(self.hardware, "is_dancing")
+                            and self.hardware.is_dancing()
+                        )
                         nid = s.apply(result, generation, from_frame=True)
                         # No extra local fixed interval: consume the server's requested delay.
                         self.next_capture = (
                             s.clock() + result["next_capture_after_ms"] / 1000
                         )
-                        if nid:
+                        phone = result["phone_probability"]
+                        observable = result["observable_probability"]
+                        interrupt_dance = (
+                            dancing
+                            and s.state == "running"
+                            and phone is not None
+                            and phone >= 0.8
+                            and observable is not None
+                            and observable >= 0.7
+                            and result["state"]
+                            in ("suspected", "observing", "cooldown")
+                        )
+                        if nid or interrupt_dance:
                             actions = self.hardware.notify(s.settings)
                             s.log(
-                                "action_executed", notification_id=nid, actions=actions
+                                "dance_interrupted"
+                                if interrupt_dance
+                                else "action_executed",
+                                notification_id=nid,
+                                actions=actions,
                             )
                         if s.phone_put_down:
                             actions = self.hardware.celebrate(s.settings)
@@ -252,6 +263,19 @@ class Runtime:
                         ):
                             s.stop_local("paused", "session_paused")
                             self._cancel_actions()
+            # Consume fresh results before sending the next motion target, so a phone
+            # response replaces the dance immediately instead of advancing it one more tick.
+            try:
+                if hasattr(self.hardware, "set_focus_progress"):
+                    actions = self.hardware.set_focus_progress(
+                        s.focus_seconds if s.state == "running" else 0
+                    )
+                    if actions:
+                        s.log("focus_motion", actions=actions)
+                self.hardware.step()
+            except Exception as exc:
+                self._cancel_actions()
+                s.log("action_failed", reason=type(exc).__name__)
             if (
                 s.state == "running"
                 and self.pending is None

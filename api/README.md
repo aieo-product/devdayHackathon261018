@@ -1,6 +1,6 @@
 # 共通判定API
 
-Mac・Reachy Mini Wireless・CoreS3から画像を受け取り、スマホを手に持つ状態の判定、5秒間の継続保持、クールダウン、セッション状態を管理する小さなNode HTTPサーバーです。各端末は撮影、API呼び出し、`notify: true`への機器別アクションを担当します。OpenAIのキーはこのサーバーだけに置きます。
+Mac・Reachy Mini Wireless・CoreS3から画像を受け取り、スマホを手に持つ状態の判定、2秒間の継続保持、繰り返し通知、セッション状態を管理する小さなNode HTTPサーバーです。各端末は撮影、API呼び出し、`notify: true`への機器別アクションを担当します。OpenAIのキーはこのサーバーだけに置きます。
 
 ## 起動
 
@@ -47,21 +47,23 @@ CoreS3など同一LANの端末から試すときは`HOST=0.0.0.0`へ変更し、
 ```json
 {
   "session_id": "uuid",
-  "state": "cooldown",
+  "state": "observing",
   "notify": true,
   "notification_id": "notification-uuid",
   "message": "スマホを置いて、作業に戻りませんか？",
   "phone_probability": 0.95,
   "observable_probability": 0.99,
   "consecutive_count": 0,
-  "continuous_hold_ms": 5000,
-  "required_hold_ms": 5000,
-  "cooldown_remaining_ms": 60000,
-  "next_capture_after_ms": 60000,
+  "continuous_hold_ms": 2000,
+  "required_hold_ms": 2000,
+  "cooldown_remaining_ms": 0,
+  "next_capture_after_ms": 1000,
   "provider": "openai",
   "reason": "phone_use_confirmed"
 }
 ```
+
+`next_capture_after_ms`は推論にかかった時間を差し引くため、この通知例では最大1000msです。`cooldown_remaining_ms`は互換性のため残し、既定では常に0です。
 
 端末は**`notify`がtrueのときだけ通知**し、`notification_id`を記憶して同じ通知を重複実行しません。通常応答の通知IDとメッセージはnullです。GETや同じ画像IDの再送は通知を再発行しません。通知が必要だった最初のHTTP応答が通信障害で失われた場合、再送応答で通知を復元する機能はありません（重複抑止を優先）。端末の中断・終了後に届いた古い応答も無視してください。
 
@@ -69,24 +71,24 @@ CoreS3など同一LANの端末から試すときは`HOST=0.0.0.0`へ変更し、
 
 ## 判定と状態
 
-- 撮影の目安は1秒間隔です。早すぎる画像は推論せず`capture_too_soon`を返します。推論中に経過した時間は次の待ち時間から差し引き、5秒到達が次の撮影より早い場合はその時点を指定します。
-- `phone_probability >= 0.8`かつ`observable_probability >= 0.7`の画像が**5秒間続く**と、到達を確認した当該画像応答で一度だけ注意します。最初の陽性画像の受理時刻が0ms、4999msでは通知せず、5000ms以降の新しい陽性で通知します。受理時刻は推論を待つ前に記録します。
-- `continuous_hold_ms`は最後の陽性画像で確認できた継続時間、`required_hold_ms`は5000です。GETや推論待ちで進捗を増やしません。`consecutive_count`は互換用の回数であり通知条件ではありません。
-- 注意後60秒は`cooldown`で推論・新しい注意を抑止します。通知応答には達成した継続時間を残し、終了後は新しい5秒間の確認が必要です。
+- 撮影の目安は1秒間隔です。早すぎる画像は推論せず`capture_too_soon`を返します。推論中に経過した時間は次の待ち時間から差し引き、2秒到達が次の撮影より早い場合はその時点を指定します。
+- `phone_probability >= 0.8`かつ`observable_probability >= 0.7`の画像が**2秒間続く**と、到達を確認した当該画像応答で一度だけ注意します。最初の陽性画像の受理時刻が0ms、1999msでは通知せず、2000ms以降の新しい陽性で通知します。受理時刻は推論を待つ前に記録します。
+- `continuous_hold_ms`は最後の陽性画像で確認できた継続時間、`required_hold_ms`は2000です。GETや推論待ちで進捗を増やしません。`consecutive_count`は互換用の回数であり通知条件ではありません。
+- 通知後のクールダウンはありません。通知応答は`state: observing`、`cooldown_remaining_ms: 0`となり、達成した継続時間を含みます。通常の撮影間隔で判定を続け、次の新しい陽性画像から新たな2秒間の確認を始めます。持ち続けた場合も繰り返し通知できます。
 - スマホを手に持っていれば、見ていない・操作していない場合も対象です。机上に置かれただけのスマホは対象外です。利用目的、ADHD、集中力そのものは判定しません。
 - 非検出、見えにくい画像、拒否、不正な判定応答、通信エラー、一時停止・終了で継続時間を0に戻します。最後の受理画像から2500ms超の空白も継続判定をリセットします。
 - OpenAIへの呼び出しは10秒で打ち切り、自動再試行はしません。10秒超で返った古い判定も採用しません。
 - `pause` / `end`で進行中の判定をキャンセルし、世代番号でも結果を破棄します。セッション期限を過ぎた判定で注意することはありません。
 - 同一セッションでは同時に1画像だけ推論します。同じ画像IDは再課金せず、異なる画像の同時送信は409になります。
 
-状態は`observing`（観察中）、`suspected`（連続確認中）、`cooldown`、`paused`、`ended`、`unknown`です。閾値はハッカソン用の初期値で、効果や精度を保証する値ではありません。
+状態は`observing`（観察中）、`suspected`（連続確認中）、`cooldown`（互換用。既定では不使用）、`paused`、`ended`、`unknown`です。閾値はハッカソン用の初期値で、効果や精度を保証する値ではありません。
 
-物理的に手に取った瞬間から正確に5.000秒での通知は、撮影・通信・推論の遅延により保証できません。実APIでの遅延は未計測です。推論に2.5秒超かかるなど観測間隔が長い環境では継続保持が成立しないため、実演前に計測します。旧3回連続仕様より、この5秒仕様を優先します。
+物理的に手に取った瞬間から正確に2.000秒での通知は、撮影・通信・推論の遅延により保証できません。実APIでの遅延は未計測です。推論に2.5秒超かかるなど観測間隔が長い環境では継続保持が成立しないため、実演前に計測します。旧3回連続仕様より、この2秒仕様を優先します。
 
 ## CoreS3の先行確認
 
 1. `mock`でまず`GET /health`、セッション開始、実画像送信まで通します。
-2. `MOCK_PHONE_PROBABILITY=1`でサーバーを再起動し、**新しいセッション**を作って`next_capture_after_ms`に従い、およそ1秒間隔で別の画像IDを送ります。最初の陽性から5秒到達後の応答で一度だけ`notify: true`になり、端末の表示・音を確認できます。
+2. `MOCK_PHONE_PROBABILITY=1`でサーバーを再起動し、**新しいセッション**を作って`next_capture_after_ms`に従い、およそ1秒間隔で別の画像IDを送ります。最初の陽性から2秒到達後の応答で一度だけ`notify: true`になり、端末の表示・音を確認できます。
 3. `DECISION_PROVIDER=openai`と有効な`OPENAI_API_KEY`をサーバーに設定し、通常作業・机上のスマホ・実際の保持で確認します。**ここから実APIの利用料金が発生します。**
 4. 一時停止、終了、Wi-Fi切断を確認し、画像やAPIキーをログへ出さないことを確認します。
 
@@ -103,6 +105,6 @@ docker build -t focus-api .
 docker run --rm -p 8787:8787 --env-file .env -e HOST=0.0.0.0 focus-api
 ```
 
-テストはHTTP認証・CORS・サイズ制限、5秒の境界・継続保持のリセット・クールダウン、重複抑止、セッション分離、停止中の応答、期限・タイムアウト、不正な判定応答を確認します。テストから実OpenAI APIは呼びません。Dockerファイルは用意していますが、Dockerビルド・公開デプロイは未検証です。
+テストはHTTP認証・CORS・サイズ制限、2秒の境界・継続保持のリセット・待機なしの繰り返し通知・任意のクールダウン、重複抑止、セッション分離、停止中の応答、期限・タイムアウト、不正な判定応答を確認します。テストから実OpenAI APIは呼びません。Dockerファイルは用意していますが、Dockerビルド・公開デプロイは未検証です。
 
 参照：[OpenAI Decisionsガイド](https://developers.openai.com/api/docs/guides/decisions)、[Decisions create API](https://developers.openai.com/api/reference/typescript/resources/decisions/methods/create)。

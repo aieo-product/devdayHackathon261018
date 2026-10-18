@@ -7,9 +7,30 @@ import { FocusEngine } from '../api/src/engine.mjs';
 const image = new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jyaUAAAAASUVORK5CYII=', 'base64')], { type: 'image/png' });
 const snapshot = (patch = {}) => ({ session_id: 'test-session', state: 'observing', notify: false,
   notification_id: null, message: null, phone_probability: null, observable_probability: null,
-  consecutive_count: 0, continuous_hold_ms: 0, required_hold_ms: 5000,
+  consecutive_count: 0, continuous_hold_ms: 0, required_hold_ms: 2000,
   cooldown_remaining_ms: 0, next_capture_after_ms: 0, provider: 'mock', reason: 'test', ...patch });
 const response = (data) => new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+test('default fetch keeps the global receiver required by browser fetch', { concurrency: false }, async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  // Native Window.fetch rejects a class instance as its receiver; Node fetch does not.
+  globalThis.fetch = async function (url, options) {
+    assert.equal(this, globalThis, 'fetch must be called with the browser global receiver');
+    requests.push(url);
+    return response(snapshot({ state: url.endsWith('/control') ? 'ended' : 'observing' }));
+  };
+  try {
+    const client = new FocusClient({ baseUrl: 'https://api.example.test', token: 'test-only-token' });
+    await client.start();
+    assert.equal(client.active, true);
+    assert.equal((await client.frame(image)).state, 'observing');
+    assert.equal((await client.end()).state, 'ended');
+    assert.equal(requests.length, 3, 'session creation, image upload and end all use the bound fetch');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 
 test('thin client works against real HTTP app: notification, duplicate, pause, resume and end', async (t) => {
   let calls = 0;
@@ -24,22 +45,22 @@ test('thin client works against real HTTP app: notification, duplicate, pause, r
   const client = new FocusClient({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: 'test-only-token' });
   await client.start({ deviceType: 'mac' });
   assert.equal(client.active, true);
-  for (now = 0; now < 5000; now += 1000) {
+  for (now = 0; now < 2000; now += 1000) {
     const pending = await client.frame(image);
     assert.equal(pending.notify, false);
     assert.equal(pending.continuous_hold_ms, now);
-    assert.equal(pending.required_hold_ms, 5000);
+    assert.equal(pending.required_hold_ms, 2000);
   }
   const confirmed = await client.frame(image, { frameId: 'confirmed' });
   assert.equal(confirmed.notify, true);
-  assert.equal(confirmed.continuous_hold_ms, 5000);
+  assert.equal(confirmed.continuous_hold_ms, 2000);
   assert.ok(confirmed.notification_id);
   assert.equal((await client.frame(image, { frameId: 'confirmed' })).notify, false);
-  assert.equal(calls, 6);
+  assert.equal(calls, 3);
   assert.equal((await client.pause()).state, 'paused');
   assert.equal(client.active, false);
   assert.equal(await client.frame(image), null);
-  assert.equal((await client.resume()).state, 'cooldown');
+  assert.equal((await client.resume()).state, 'observing');
   assert.equal(client.active, true);
   assert.equal((await client.end()).state, 'ended');
   assert.equal(client.active, false);
@@ -107,7 +128,7 @@ test('a failed pause still stops locally and preserves an error for the UI', asy
 
 test('local duration stops capture without needing another API response', async (t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
-  const client = new FocusClient({ baseUrl: 'https://api.example.test', token: 'test-only-token', fetchImpl: async () => response(snapshot({ continuous_hold_ms: 4000 })) });
+  const client = new FocusClient({ baseUrl: 'https://api.example.test', token: 'test-only-token', fetchImpl: async () => response(snapshot({ continuous_hold_ms: 1000 })) });
   await client.start({ durationSeconds: 1 });
   assert.equal(client.active, true);
   t.mock.timers.tick(1001);

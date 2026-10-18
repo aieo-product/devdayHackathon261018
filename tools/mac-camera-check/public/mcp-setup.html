@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>Focus / dots・MCP Events接続</title>
+    <link rel="stylesheet" href="/style.css">
+    <script type="module" src="/mcp-setup.mjs"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="header">
+        <a class="wordmark" href="/" aria-label="Focus カメラ確認に戻る">focus<span class="brand-dot">.</span></a>
+        <span class="local-badge"><span></span> このMacを接続</span>
+      </header>
+      <section class="intro">
+        <p class="eyebrow">MCP EVENTS / SETUP</p>
+        <h1>検知を、dotsにも届ける。</h1>
+        <p>このMacの検知イベントをChatGPTに接続します。ここではカメラは起動しません。</p>
+      </section>
+      <div id="setup-error" class="error-banner" role="alert" hidden></div>
+      <div class="workspace">
+        <section class="result-card" aria-labelledby="server-title">
+          <div class="result-heading"><h2 id="server-title">01 / MCPサーバーを追加</h2><span id="setup-state" class="state-badge">確認中</span></div>
+          <p id="setup-status" class="status-message" aria-live="polite">接続設定を確認しています…</p>
+          <p class="status-message">ChatGPTの「Plugins」→「Add custom MCP server」で、以下のURLを入力してください。認証はOAuthを選択します。クライアント登録はDCRで自動的に行われます。</p>
+          <p id="mcp-url" class="reason" tabindex="0" aria-label="公開MCPサーバーURL">—</p>
+          <div class="control-buttons"><button id="copy-url" class="button button-secondary" disabled>URLをコピー</button></div>
+          <p id="copy-status" class="status-message" aria-live="polite"></p>
+          <p class="privacy-note">認証画面が開いたら、手順02で発行するペアリングコードを入力して接続を許可してください。</p>
+        </section>
+        <section class="result-card" aria-labelledby="pairing-title">
+          <div class="result-heading"><h2 id="pairing-title">02 / このMacとの接続を許可</h2></div>
+          <p class="status-message">使い捨てのコードを発行し、WorkerのOAuth認証画面へ入力します。コードの有効期限は10分です。</p>
+          <div class="control-buttons"><button id="create-pairing" class="button button-primary" disabled>ペアリングコードを発行 <span aria-hidden="true">→</span></button></div>
+          <div id="pairing-result" hidden>
+            <p class="metric-label">ペアリングコード</p>
+            <p id="pairing-code" class="reason" tabindex="0" aria-label="ペアリングコード"></p>
+            <div class="control-buttons"><button id="copy-code" class="button button-secondary">コードをコピー</button></div>
+            <p id="pairing-expiry" class="status-message" role="timer" aria-live="off"></p>
+          </div>
+          <p id="pairing-status" class="status-message" aria-live="polite">サーバー設定の確認後に発行できます。</p>
+          <p class="privacy-note">このコードは、同じ接続グループの端末イベントと遠隔ON / OFFへのアクセスを許可します。遠隔ONには、各端末での事前の許可も必要です。コードは他の人と共有しないでください。この画面内だけに保持され、期限が切れると非表示になります。</p>
+        </section>
+      </div>
+      <section class="howto" aria-label="接続後の手順">
+        <div><span>03</span><p><strong>dotsで購読を依頼</strong>接続したFocusを有効にして、下の依頼文を送ります。</p></div>
+        <div><span>04</span><p><strong>カメラ確認に戻る</strong>「確認開始」を押して、このMacのカメラを許可します。</p></div>
+        <div><span>05</span><p><strong>スマホを2秒持つ</strong>カメラ確認画面を表示したまま、dotsの通知を確認します。</p></div>
+      </section>
+      <section class="log-card" aria-labelledby="prompt-title">
+        <div class="log-heading"><h2 id="prompt-title">dotsへの依頼文</h2><span>接続後に送信</span></div>
+        <p id="dot-prompt" class="status-message">Focusのfocus.phone_heldを購読して、イベントが届いたらスマホを置いて集中に戻るよう一言で知らせて。解除するまで監視して。</p>
+        <div class="control-buttons"><button id="copy-prompt" class="button button-secondary">依頼文をコピー</button></div>
+        <p class="privacy-note">イベントの配送は非同期です。Macの即時通知とdotsの通知には時間差があります。カメラ確認画面を離れると撮影が止まるため、接続後は確認画面に戻しておいてください。</p>
+      </section>
+      <footer><a href="/">← カメラ確認に戻る</a><span>FOCUS / MCP EVENTS</span></footer>
+    </main>
+  </body>
+</html>
