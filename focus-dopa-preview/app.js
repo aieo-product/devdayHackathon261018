@@ -11,7 +11,33 @@ import { DesktopOverlayClient } from './desktop-overlay-client.js';
 import { ActionShowcase } from './action-showcase.js';
 const $=id=>document.getElementById(id);
 const showcaseView=new URL(location.href).searchParams.get('showcase')==='1';
+document.body.dataset.view=showcaseView?'showcase':'focus';
 if(showcaseView){document.body.dataset.showcaseView='true';$('api-mode').value='demo';$('auto-mini').checked=false;$('desktop-overlay-enabled').checked=false;}
+else arrangeFocusSettings();
+
+function arrangeFocusSettings(){
+ const form=$('settings-dialog').querySelector('form');
+ const done=form.querySelector('.dialog-done');
+ const addSection=(className,label,elements)=>{
+  const section=document.createElement('details');
+  section.className=className;
+  const summary=document.createElement('summary');summary.textContent=label;section.append(summary);
+  for(const element of elements){
+   if(!element)continue;
+   element.querySelectorAll('button').forEach(button=>button.type='button');
+   section.append(element);
+  }
+  form.insertBefore(section,done);
+ };
+ addSection('focus-connection-settings','接続・通知設定',[
+  document.querySelector('.api-panel'),...document.querySelectorAll('.monitor-panel')
+ ]);
+ addSection('focus-appearance-settings','表示・演出設定',[
+  document.querySelector('.pattern-bar'),document.querySelector('.intensity-label')
+ ]);
+ document.querySelector('.app-subtitle').textContent='通常モード';
+ form.querySelector('.settings-note p').textContent='音のON/OFFは画面右上から。接続・通知や演出の設定は下で変更できます。';
+}
 const profiles={
  bounce:{title:'NEON BOUNCE',caption:'弾むリアクション × ネオンの波紋',slogan:'ぷにっと、いこう！',duration:850},
  rush:{title:'ARCADE RUSH',caption:'ためて跳ぶ × スピードライン × ゲージ点火',slogan:'よーし、スタート！',duration:680},
