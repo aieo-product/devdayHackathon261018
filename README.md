@@ -1,8 +1,22 @@
+---
+title: Reachy Focus
+emoji: 🌱
+colorFrom: green
+colorTo: yellow
+sdk: static
+app_file: index.html
+pinned: false
+short_description: Gentle smartphone-holding reminders on Reachy Mini Wireless
+tags:
+  - reachy_mini
+  - reachy_mini_python_app
+---
+
 # 集中支援アプリ — スマホを持ったら、作業に戻るきっかけを
 
-作業中についスマホを手に取る人のための、カメラとAIを使った集中支援プロトタイプです。**OpenAI Decisions APIで「スマホを手に持っているか」「手元を判定できるか」を判断し、継続保持を確認したら端末から声かけします。** 本人が開始・一時停止・終了を選べます。集中力やADHDを診断するものではありません。
+作業中についスマホを手に取る人のための、カメラとAIを使った集中支援プロトタイプです。**OpenAI Decisions APIでスマホ保持と手元の可視性を判断し、継続保持を確認したら端末が声・画面・動きで知らせます。** 本人が開始・一時停止・終了を選べます。集中力やADHDを診断するものではありません。
 
-現在の公開デモ仕様は **2秒保持・通知後のクールダウンなし**。Mac確認UIで画面通知を実演でき、同じ判定APIをCoreS3・Reachy Miniへ展開する構成です。各機器の完成範囲は下表に分けています。
+現行の共通APIは **2秒保持・通知後のクールダウンなし**。Mac確認UI、Reachy Mini本体アプリ、CoreS3クライアントを同じリポジトリで開発しています。別のEvents WorkerでMCPイベントと監視ON/OFFを実装し、仮想カメラから公開APIまでの動作を確認しました。実dotsアカウントへの接続・通知は未確認です。
 
 **評価資料:** [評価軸と検証の根拠](docs/evaluation.md) · [提出用説明文](docs/submission.md) · [3分デモ台本・起動手順](docs/demo.md) · [機械可読サマリー](docs/evaluation.json)
 
@@ -10,118 +24,159 @@
 
 | 入口 | 確認できる内容 |
 | --- | --- |
-| [公開API](https://focus-shared-api-20261018.take-otani.workers.dev/) | API入口と仕様書へのリンクを返すJSON。操作画面ではありません |
-| [公開仕様書](https://focus-shared-api-20261018.take-otani.workers.dev/docs) / [OpenAPI JSON](https://focus-shared-api-20261018.take-otani.workers.dev/openapi.json) | 認証不要で読めるHTTP契約・状態・判定条件 |
-| [health](https://focus-shared-api-20261018.take-otani.workers.dev/health) | 設定状態。資料作成時の応答は `provider: openai, configured: true` |
-| [Mac確認UI・最新デモ実装（PR #6）](https://github.com/aieo-product/devdayHackathon261018/pull/6) | カメラ→公開Worker→実OpenAI→画面通知。起動後の画面は `http://127.0.0.1:3000` |
-| [公開リポジトリ](https://github.com/aieo-product/devdayHackathon261018) | ソース、テスト、資料、進捗 |
+| [共通判定API](https://focus-shared-api-20261018.take-otani.workers.dev/) | APIと仕様への入口。操作画面ではありません |
+| [公開仕様書](https://focus-shared-api-20261018.take-otani.workers.dev/docs) / [OpenAPI](https://focus-shared-api-20261018.take-otani.workers.dev/openapi.json) | 認証不要で閲覧できるHTTP契約・状態・2秒判定条件 |
+| [Events MCP](https://focus-events-20261018.take-otani.workers.dev/mcp) / [Events手順](cloudflare-events/README.md) | OAuthで接続するイベント・端末制御API。ブラウザで開く操作画面ではありません |
+| [Mac確認UI](tools/mac-camera-check/README.md) | カメラ→共通API→画面通知、遠隔ON/OFF。起動後は `http://127.0.0.1:3000` |
+| [Reachy本体アプリ](src/reachy_focus/) / [実機検証記録](docs/reachy/validation.md) | 本体カメラと公式fear1の動作・音声。導入手順は本README後半 |
+| [公開リポジトリ](https://github.com/aieo-product/devdayHackathon261018) | ソース、テスト、評価資料 |
 
-認証不要の資料閲覧と、認証が必要な画像判定APIは別です。`/v1/*`にはチームから受け取るアプリトークンが必要です。**公開された操作用Web UIのURLは未確認**で、localhostのMac確認UIは第三者がそのままアクセスできる提出URLにはなりません。`health`だけで画像認識の成功や精度を証明することもできません。
+`/v1/*`の画像判定にはチームから受け取るアプリトークンが必要です。OpenAIキーはサーバー専用です。**公開操作UI・デモ動画・提出受付のURLは未確認**で、localhostやReachyのLAN内URLは外部の評価者が直接開ける提出URLにはなりません。公開APIのhealthは設定状態の確認であり、画像認識精度を証明しません。
 
-> **バージョンの注意（2026-10-18時点）:** 公開WorkerとPR #6は2秒保持・待機0秒ですが、この資料の検証元 `feat/shared-focus-api` / `4ca4368` のコードは5秒保持・待機60秒です。PR #6は確認時点で未マージです。このブランチのローカル実行と公開デモを同じ版として評価しないでください。[比較と根拠](docs/evaluation.md)を参照してください。
-
-## 解決したいことと利用体験
-
-勉強やデスクワークで、気付かないうちにスマホへ手が伸びることがあります。本アプリは、その行動を本人が気付くきっかけに変えます。
+## 利用体験と審査観点
 
 1. 利用者が監視を開始し、カメラに手元を映します。
 2. AIが画像ごとにスマホ保持と可視性を判定します。机上に置かれただけのスマホは対象外です。
-3. APIが新しい画像で2秒以上の保持を確認したら、`notify: true`と一意の通知IDを返します。
+3. 新しい画像で2秒以上の保持を確認すると、APIが `notify:true` と一意の通知IDを返します。
 4. 端末が画面・音・動きに変換します。必要なスマホ作業中は一時停止できます。
 
-2秒は画像の受理時刻に基づく確認済み時間です。撮影・通信・推論の遅延があり、実際に持った瞬間から正確に2.000秒で通知する保証ではありません。判定不能時は通知せず、停止後に遅れて戻った結果も通知しません。
+2秒は画像の受理時刻に基づく継続保持条件です。通信・推論の遅延があるため、実際に持った瞬間から正確に2秒後の通知は保証しません。判定不能時は通知せず、停止後に遅れて戻った結果も通知しません。
 
-## 審査4観点と成果の対応
+| [公式イベント](https://luma.com/OpenAIDevDay2026CommunityHackathonTokyo)の観点 | 実装・評価材料 |
+| --- | --- |
+| 新機能の活用 | Decisions APIの保持・可視性predicate、MCP Eventsの購読・署名配送・OAuthを実装。[AIアダプター](api/src/provider.mjs)、[Events実装](cloudflare-events/README.md) |
+| 使いやすさ | 開始・一時停止・終了、判定理由と保持時間の表示。遠隔操作では指示と実状態を分け、端末の許可がある間だけON。[Mac手順](tools/mac-camera-check/README.md) |
+| 有用性 | スマホを手に取った本人へ作業に戻るきっかけを提供。集中時間の改善や継続利用効果は未測定。[デモ](docs/demo.md) |
+| 独創性 | 共通のAI判断をPCの表示、小型端末の音、ロボットの反応、イベント連携へ接続。[API契約](docs/api-contract.md)、[Reachy実機記録](docs/reachy/validation.md) |
 
-[公式イベントページ](https://luma.com/OpenAIDevDay2026CommunityHackathonTokyo)の4観点に沿った説明です。検証可能な成果と、今後検証する価値を分けて示します。
+## 実装・検証済みの範囲
 
-| 観点 | 提案・実装 | 評価できる根拠 |
+確認日: **2026-10-18（JST）**。下記は実装担当の検証記録を集約したもので、資料編集時に全試験を再実行したものではありません。
+
+| 対象 | 確認済み | 残っている確認 |
 | --- | --- | --- |
-| 新機能の活用 | Decisions APIの2つのpredicateを、画像からの保持判定と可視性判定に使用 | [provider実装](api/src/provider.mjs)、[実API試験記録](https://github.com/aieo-product/devdayHackathon261018/issues/3) |
-| 使いやすさ | 開始・一時停止・終了、保持時間と判定理由の表示、停止時のカメラ停止 | [Mac確認UIの実装・試験](https://github.com/aieo-product/devdayHackathon261018/pull/6)、[クライアントの停止テスト](clients/focus-client.test.mjs) |
-| 有用性 | 作業からスマホへ注意が移ったとき、本人へ復帰のきっかけを提供 | [利用シナリオとデモ](docs/demo.md)。集中時間の改善・継続利用効果は未測定 |
-| 独創性 | 共通のAI判断を、PCの画面通知・小型端末の音・ロボットの反応へ接続する設計 | [API契約](docs/api-contract.md)、[CoreS3実装](devices/cores3/cores3.ino)、[Reachy担当記録](https://github.com/aieo-product/devdayHackathon261018/issues/2)。機器ごとの結合範囲は下表 |
+| API・Worker・Mac・Events | 自動テスト計157件（API/クライアント37、既存Worker1、Mac51、Events68）通過 | 実環境の遅延分布・認識精度の統計評価 |
+| Macの2秒・繰り返し通知 | Chrome仮想カメラ＋実OpenAIで同一セッション2回通知。保持2534ms / 2386ms | 仮想入力の結果を物理カメラの再試験と混同しない |
+| MCP Events・監視ON/OFF | 公開Events疎通12項目、仮想カメラ＋実APIのブラウザE2E 7項目通過。通知2件の履歴一致、遠隔OFF後の撮影停止・適用確認 | 実dotsのOAuth接続・購読・通知、Reachy/CoreS3の遠隔監視アダプター |
+| Reachy Mini Wireless | 本体実画像→公開API→5313ms保持検知→fear1の動作・音声→時間終了を確認 | この実機記録は旧5秒条件。現行2秒の実機再試験、ページ/Macを閉じた単独継続は未確認 |
+| CoreS3 | ビルド、USB書込み、停止状態での起動。公開APIの画像なし開始/終了で2000msを確認 | 本体からの画像送信・実判定・ビープを通す一連動作 |
 
-## 現在の完成範囲
+詳しい試験条件・制約は[評価資料](docs/evaluation.md)、端末ごとの記録は[Reachy](docs/reachy/validation.md)・[CoreS3](devices/cores3/README.md)を参照してください。検知確率1.0はモデルの出力値であり、認識精度100%を意味しません。
 
-確認日: **2026-10-18（JST）**。本チャットでの再実行、担当セッション・PRの報告、未確認を区別しています。
+## Mac・共通APIの起動とテスト
 
-| 機能 | 状態 | 根拠・範囲 |
-| --- | --- | --- |
-| 共通API・状態管理・停止・重複抑止 | 実装・ローカル検証済み | この版の `npm test` **31/31**、Worker結合 **1/1**、mockスモーク成功 |
-| Cloudflare公開・実Decisions判定 | 公開済み、実推論の担当検証あり | 今回health/公開仕様書をGET確認。写真判定は[Issue #3](https://github.com/aieo-product/devdayHackathon261018/issues/3)の有限試験 |
-| 2秒保持・繰り返し通知・Mac確認UI | PR #6に実装、公開Worker反映の記録あり | 担当報告: 仮想カメラから実APIへ送り、保持2534ms・2386msで2回通知。画面内通知・ビープを実装、OS通知は未実装 |
-| CoreS3 | ビルド・USB書込み・停止起動を確認 | [実機記録](devices/cores3/README.md)。実画像→通知音の一連動作は未確認、担当セッションで継続中 |
-| Reachy Mini Wireless | 別担当の実装・部分確認の報告あり | [Issue #2](https://github.com/aieo-product/devdayHackathon261018/issues/2)。インストール・カメラ表示等。実画像→fear1反応、音・動作、Macなし継続は未確認。このチェックアウトに実装コードなし |
-| MCP Events・dots・遠隔ON/OFF | 開発中 | [Issue #7](https://github.com/aieo-product/devdayHackathon261018/issues/7)とWeb担当セッション。接続完了・配信成功として扱わない |
-| 公開操作UI・提出受付 | 未確認 | 公開API URLとlocalhost UIを区別。提出前の確認項目は[提出資料](docs/submission.md) |
-
-## 構成とAIの役割
-
-```mermaid
-flowchart LR
-  Mac[Mac確認UI] --> Proxy[Mac内ローカルプロキシ]
-  Proxy --> API[Cloudflare Worker / REST API]
-  Core[CoreS3 撮影・通知実装] -. 実機結合確認中 .-> API
-  Reachy[Reachy Mini 別担当実装] -. 実機結合確認中 .-> API
-  API --> AI[OpenAI Decisions API]
-  AI -->|保持・可視性の確率| API
-  API <--> DB[SQLite Durable Objects]
-  API -->|notify / notification_id / 状態| Proxy
-  Proxy --> Mac
-```
-
-AIへの問い合わせは `gpt-6-luna`、`observable`と`phone_use`の2 predicateです。確率を受けた共通エンジンが、しきい値・継続時間・重複・停止を判断します。端末は新しいフレーム応答の`notify: true`を一度だけ実行します。
-
-公開Workerはセッション状態と受理済みフレームIDをSQLite Durable Objectsへ保存します。ローカルNode APIはプロセスメモリを使い、再起動で状態が失われます。
-
-## APIキー・カメラ不要の最短検証
-
-Node.js **22.9以上**（今回の検証は24.19.0）。リポジトリ直下で実行します。Node APIと以下のテストは外部npm依存不要です。
-
-```sh
-npm test
-```
-
-端末Aで、`.env`を読み込まずモックを明示して起動します。以下のトークンはローカル試験専用の例です。
-
-```sh
-env -u OPENAI_API_KEY \
-  DECISION_PROVIDER=mock FOCUS_API_TOKEN=local-evaluation-token \
-  MOCK_PHONE_PROBABILITY=0.95 MOCK_OBSERVABLE_PROBABILITY=1 \
-  HOST=127.0.0.1 PORT=18787 \
-  node api/src/index.mjs
-```
-
-端末B:
-
-```sh
-FOCUS_API_URL=http://127.0.0.1:18787 \
-FOCUS_API_TOKEN=local-evaluation-token \
-node scripts/smoke-test.mjs --expect-notify
-```
-
-このチェックアウトでは、合成画像を使い約5秒の保持で通知1回→重複抑止→一時停止→再開→終了を検証します。成功時は`PASS`、終了コード0です。mockは画像を解析しないため、認識精度や公開デモの2秒判定の試験にはなりません。終了後は端末AをCtrl+Cで停止します。
-
-Workerのローカル結合試験には開発依存が必要です。実OpenAIへの画像送信はしません。
+Node.js **22.9以上**。リポジトリ直下で実行します。
 
 ```sh
 npm ci
+npm test
 npm run test:worker
+npm run test:mac-check
+npm run test:events
 ```
 
-最新の2秒デモは[PR #6の固定コミットと起動手順](docs/demo.md)で再現します。このブランチには`start:mac-check`がないため、そのコマンドだけを実行しても起動しません。
+通常の自動テストは外部のOpenAIや実カメラを使いません。MacデモはGit管理外の `cloudflare/.env.connection` に `FOCUS_API_URL` と `FOCUS_API_TOKEN` を設定し、次を実行します。Eventsの追加設定とペアリングは[Mac手順](tools/mac-camera-check/README.md)にあります。
 
-## データと現在の制約
+```sh
+npm run start:mac-check
+```
 
-- 実APIモードでは画像をCloudflare経由でOpenAIへ送ります。アプリ側で生画像を永続保存する処理はありません。外部サービスの保存方針まで「保存されない」と保証するものではありません。
-- `OPENAI_API_KEY`はサーバーだけに設定します。`FOCUS_API_TOKEN`は別のデモ用共有トークンです。Mac確認UIはローカルプロキシがこのトークンを保持します。利用者別の認証・権限分離は未実装です。
-- 机上か手持ちかを判定しますが、スマホを使う目的は判定しません。必要な利用には一時停止を使います。
-- 観測間隔が2.5秒を超えると保持時間をリセットします。認識精度の統計評価、実環境の遅延分布、集中への効果は未測定です。
+`http://127.0.0.1:3000` を開き、本人が開始・カメラ許可を選びます。実APIモードでは画像をOpenAIへ送信します。[APIキー不要のモック試験](docs/evaluation.md#ローカル再現追加のapi利用なしで確認する)、[公開APIの疎通手順](cloudflare/README.md)、[Events疎通手順](cloudflare-events/README.md)も利用できます。
+
+## データ・認証・制約
+
+- アプリケーションは生画像を永続保存しません。実判定ではCloudflare経由でOpenAIへ送信し、外部サービスの保持条件・料金は別途適用されます。
+- 判定APIの共有BearerトークンとOpenAIキーは別です。Macのローカルプロキシは秘密値をブラウザへ渡しません。
+- EventsのOAuthはsourceごとにデータを分離します。アダプター用の共通管理トークンは信頼するサーバー専用で、製品向けの端末別認証は未実装です。
+- Eventsへ送るのは通知ID・セッション・保持時間・確率などのメタデータで、画像は含めません。Mac側の送信待ちはメモリー、Worker受理後の配送待ちは永続化します。
+- 遠隔OFFは監視停止であり物理電源操作ではありません。端末がofflineなら実際の停止を即時に確認できません。Macはページを表示し、ローカルで遠隔操作を許可した間だけONできます。
+- スマホ利用の目的・集中度・感情・医学的診断は判定しません。効果や精度の統計評価は未実施です。
 
 ## 開発者向け資料
 
-- [Node APIのセットアップ](api/README.md) / [このチェックアウトのHTTP契約](docs/api-contract.md)
-- [Workerのセットアップ](cloudflare/README.md) / [このチェックアウトのAPI仕様書](cloudflare/API仕様書.md)
-- [CoreS3のセットアップと実機記録](devices/cores3/README.md)
-- [全体進捗 #1](https://github.com/aieo-product/devdayHackathon261018/issues/1) / [Reachy #2](https://github.com/aieo-product/devdayHackathon261018/issues/2) / [API #3](https://github.com/aieo-product/devdayHackathon261018/issues/3) / [拡張 #7](https://github.com/aieo-product/devdayHackathon261018/issues/7)
+- [Node API](api/README.md) / [HTTP契約](docs/api-contract.md)
+- [Cloudflare Worker](cloudflare/README.md) / [API仕様書](cloudflare/API仕様書.md)
+- [Mac確認UI](tools/mac-camera-check/README.md) / [MCP Events・遠隔監視](cloudflare-events/README.md)
+- [CoreS3の導入と実機記録](devices/cores3/README.md)
+
+## Reachy Mini本体アプリ：導入・運用
+
+Reachy Mini Wirelessの本体カメラから**共通判定API**へ画像を送り、サーバーが返す新しい `notify: true` を本体の公式の😨 Fearプリセット（fear1）・音声に変換するPythonアプリです。監視処理は本体で動作する構成です。操作ページとMacを閉じた単独継続の実測は未確認です。
+
+### 接続・導入
+
+既定URLは `https://focus-shared-api-20261018.take-otani.workers.dev`。
+API担当から渡された **FOCUS_API_TOKEN** を本体の設定画面へ入力します。
+OpenAI APIキーは共通APIサーバーだけが保持し、Reachyへ設定しません。
+
+1. Controlで `reachy_focus` をインストール・起動（初回公開前は下記の開発インストール）。
+2. `http://reachy-mini.local:8042` または `http://本体のIP:8042` を開く。
+3. API URL・共有アプリトークンを保存し、「カメラを1枚確認」と「通知をテスト」を行う。
+4. 集中時間と音声の有無を選び、共通API・OpenAIへの画像送信に同意して開始する。
+5. いつでも一時停止・再開・終了できる。設定変更は進行中のセッションを終了し、新たに開始する。
+
+### 判定と停止の契約
+
+- スマホを**手に持つ状態が設定時間続いたか**、しきい値は共通APIが判断する（現行の共通API既定値は2秒、クールダウンなし）。本体はサーバーが指定する間隔で次の保持確認へ進む。公開APIのクールダウン撤去はAPI担当者が対応済み。見ていない・操作していない保持も対象。置いてあるだけなら対象外。
+- 本体に独自の3回連続判定やローカルの5秒タイマーはない。スマホ保持を一度検知した後、可視性0.7以上・保持確率0.2以下の新しい非検出応答で、公式 `cheerful1` を1回再生する。手元が隠れた場合や停止後の遅延応答では喜ばない。
+- `next_capture_after_ms` に従い、応答後に固定1秒や3秒を追加しない。長辺640px以下の生JPEG、1MiB以下、一意の `X-Frame-Id` で送信する。同時送信は1件のみ。
+- **新しいフレーム応答**の `notify: true` だけを消費し、`notification_id` で二重実行を防ぐ。GET・control・画面再描画からは通知しない。
+- `continuous_hold_ms` はサーバーの確認済み値だけを表示する。時間経過で画面側の進捗を増やさない。
+- 一時停止・終了はHTTPの完了を待つ前に、本体の撮影・通知・待機アクションを止める。停止要求が失敗しても本体は停止を維持し、遅延した画像応答を捨てる。
+- 集中タイマーは開始リクエスト時から計測し、一時停止中も進む。期限で本体を停止し、サーバーへ終了要求を送る。終了済みセッションは新規に開始する。
+- APIの `provider: mock` は画像解析を行わない。操作画面にmock/openaiを明示する。HTTP 200でも `state: unknown` なら判定失敗として扱い、通知しない。
+- 起動時にモーターを有効にし、2秒かけて顔を起こす。アプリ実行中は、アンテナと頭の小さな呼吸動作を続ける（モーションのチェックボックスなし）。
+- 手元が見えてスマホを持っていない判定が続くと、10秒・20秒・30秒の3段階で首・アンテナのリズムが活発になる。スマホ保持・判定不能・通信失敗・10秒以上の判定欠落・一時停止・終了で穏やかな動きへ戻る。集中そのものを推定する機能ではない。
+- 通知時は公式 `pollen-robotics/reachy-mini-emotions-library` の `fear1` を再生する。0.8秒で先頭姿勢へ移り、公式の軌跡を再生して1秒で待機姿勢へ戻る。音声ONならプリセット付属音を再生し、終了後に「スマホ、今すぐ置いて！」と日本語で声をかける。喜ぶときはcheerful1の付属音を使う。停止・一時停止で待機中の声かけも破棄する。プリセット未ロード時は画面に明示する。
+- 一時停止・セッション終了は観測と通知リアクションを停止する。待機中の小さな動作は続く。アプリ停止時には待機動作も停止する。サーバーから任意のスクリプトや動作を受け取らない。
+
+仕事でスマホを使うときは本人が一時停止する。集中度・意図・感情・医学的診断は行わない。物理的な保持開始から正確に2秒後の通知は、通信・推論遅延があるため保証しない。
+
+### 設定とプライバシー
+
+共有トークンは本体の `~/.config/reachy-focus/settings.json` に0600で保存する。`XDG_CONFIG_HOME` があればその下。ソース・URL・ブラウザのlocalStorage・応答・イベントへ実値を出さない。以前の直接OpenAI接続設定は読み込み時に無視し、共有トークンへ流用しない。次回保存時に旧設定も除去する。
+
+本人が開始したセッション中だけ画像を共通APIへ送る。共通APIはopenaiモードでOpenAIへ送信する。本体と共通サービスは生画像を永続保存しない。API提供側の保持条件と利用料金は別途適用される。明示操作による確認画像はローカル画面だけに表示し、共通APIへ送信しない。送信済みのリクエストは停止後も処理される場合があるが、古い結果で本体は反応しない。
+
+本体イベントログは当該セッションの最新500件までメモリに保持する。新規セッションとアプリ終了で消える。共通API側のセッション情報は終了・期限後約30分で削除される仕様であり、本体とは別管理。
+
+操作画面は信頼するLAN用のHTTPで、ユーザー認証はない。ポート8042をインターネットへ公開しない。異なるサイトからの操作はOrigin/専用ヘッダーで拒否する。共有トークンはハッカソン用で、利用者ごとの分離はない。
+
+### 開発・実機導入
+
+Python 3.10以上、Reachy SDK 1.12系を対象とする。
+
+```sh
+uv venv --python 3.12
+uv pip install --python .venv/bin/python -e '.[dev]'
+.venv/bin/python -m pytest -q
+.venv/bin/ruff check src/reachy_focus tests/reachy
+.venv/bin/python -m build
+.venv/bin/python scripts/check-reachy-package.py
+.venv/bin/reachy-mini-app-assistant check .
+```
+
+Wireless本体上の既存アプリ用環境へインストールする。SDKを渡すのはデーモンで、独自のハードウェア接続やデーモン変更はしない。同時に実行する本体アプリは1つ。
+
+```sh
+/venvs/apps_venv/bin/python -m pip install /path/to/repository
+# Controlから起動するか、開発時は以下を実行（同時実行しない）
+/venvs/apps_venv/bin/python -m reachy_focus.main
+```
+
+### モノレポと配布
+
+```text
+README.md / pyproject.toml / index.html / style.css  # HF Spaceの配布契約
+src/reachy_focus/                                  # Reachy実装・画面・音声
+tests/reachy/                                     # Reachy専用テスト
+docs/reachy/                                      # Reachy専用資料
+api/ / clients/ / devices/cores3/                   # 既存チーム実装
+apps/mac/ / apps/cores3/                           # 他機器の独立置き場
+```
+
+GitHubとHF Spaceへ**同一コミット**を直接pushする。HFには全ソースが公開されるが、Pythonのwheel/sdistには `reachy_focus` と必要な画面・音声だけを含む。切り出しやコピーは不要。他機器の依存関係は各プロジェクト内に閉じる。
+
+[API接続仕様](docs/reachy/shared-api.md) / [実機検証記録](docs/reachy/validation.md) / [直接公開手順](docs/reachy/release.md) / [Issue #2](https://github.com/aieo-product/devdayHackathon261018/issues/2)
+
+[公式アプリ仕様](https://github.com/pollen-robotics/reachy_mini/blob/main/docs/source/SDK/apps.md) / [共通API公開仕様](https://focus-shared-api-20261018.take-otani.workers.dev/docs)

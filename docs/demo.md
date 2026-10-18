@@ -1,18 +1,16 @@
 # 3分デモ台本と再現手順
 
-対象: **公開Workerの2秒保持・クールダウン0秒仕様**。Mac確認UIは[PR #6](https://github.com/aieo-product/devdayHackathon261018/pull/6)にあります。この資料のある旧コードのチェックアウトにはUIの起動スクリプトがありません。
+対象: **2秒保持・クールダウン0秒の公開判定API、Mac確認UI、公開Events Worker**。ソースと試験根拠は[評価ガイド](evaluation.md)、設定の詳細は[Mac手順](../tools/mac-camera-check/README.md)と[Events手順](../cloudflare-events/README.md)を参照してください。
 
-## 最新デモを起動する
+## Macで判定デモを起動する
 
 前提: Node.js 22.9以上、対応ブラウザとカメラ、ネット接続、チームが共有する`FOCUS_API_TOKEN`。画像はMac内のローカルサーバーから公開Workerを経由してOpenAIへ送られます。カメラは本人が開始するまで有効になりません。
 
-既存の作業を変更しないよう、別ディレクトリへデモ版を取得します。以下は資料作成時の固定コミットです。GitHubへアクセスできる環境で実行してください。
+既存の作業を変更しないよう、別ディレクトリへ提出版を取得します。以下はMac確認UI・Events連携を含む統合後のデフォルトブランチ向け手順です。
 
 ```sh
-git clone --branch feat/mac-camera-check \
-  https://github.com/aieo-product/devdayHackathon261018.git focus-demo
+git clone https://github.com/aieo-product/devdayHackathon261018.git focus-demo
 cd focus-demo
-git checkout --detach ca2eb20d7d9c97ef23220b3d352dace8edfce0cc
 ```
 
 Git管理対象外の`cloudflare/.env.connection`を作り、次の例のトークン部分をチームから受け取った値に置き換えます。`OPENAI_API_KEY`はUIには不要です。
@@ -26,15 +24,48 @@ FOCUS_API_TOKEN=replace-with-worker-token
 npm run start:mac-check
 ```
 
-ChromeまたはSafariで`http://127.0.0.1:3000`を開きます。ポート使用中なら`MAC_CAMERA_PORT=3001 npm run start:mac-check`で変更できます。UIの起動はNode組み込み機能のみを使い、Workerのローカル試験は別途`npm ci`が必要です。
+ChromeまたはSafariで`http://127.0.0.1:3000`を開きます。ポート使用中なら`MAC_CAMERA_PORT=3001 npm run start:mac-check`で変更できます。UIの起動はNode組み込み機能のみを使い、Workerのローカル試験・ビルド検証には別途`npm ci`が必要です。localhostのURLを公開操作UIとして提出しないでください。
 
 1. 「確認開始」を押し、カメラを許可します。手元とスマホが画面に入る位置へ調整します。
-2. `provider: openai`、`required_hold_ms: 2000`相当の表示・ログを確認します。旧仕様やmockの場合は先に説明を合わせます。
+2. `provider: openai`、`required_hold_ms: 2000`相当の表示・ログを確認します。
 3. スマホを机上に置いた状態と、手に持った状態を比べます。
 4. 新しい画像で2秒以上の保持を確認すると画面通知が出ます。音はUIの設定で切り替えます。通知回数と確認済み保持時間を見せます。
 5. 通知後も新たな保持判定で再通知することを示します。一時停止・終了ではカメラと送信が止まります。
 
 既定の確認時間は3分です。タブが非表示になる場合も停止するため、デモ中はUIを表示したままにします。このMac確認UIの通知は画面内表示とWeb Audioのビープ音です。OS通知は未実装です。
+
+## Events・遠隔操作を追加する
+
+`cloudflare/.env.connection`へ以下を追加し、ローカルサーバーを再起動します。値はチームの保護された共有経路で受け取り、トークンをソースへ書き込まないでください。
+
+```dotenv
+FOCUS_EVENTS_URL=https://focus-events-20261018.take-otani.workers.dev
+FOCUS_EVENTS_TOKEN=replace-with-events-worker-ingest-token
+FOCUS_SOURCE_ID=replace-with-your-fixed-profile-uuid
+FOCUS_DEVICE_ID=mac-demo-1
+```
+
+判定APIの`FOCUS_API_TOKEN`とEvents用の`FOCUS_EVENTS_TOKEN`は別です。複数端末をまとめて操作する場合は同じ`FOCUS_SOURCE_ID`と端末ごとに異なる`FOCUS_DEVICE_ID`を設定します。Events Workerへの送信は検知メタデータだけで、画像は送りません。
+
+1. 監視されるMacで確認画面を表示し、「このMacの遠隔操作を許可」を押します。カメラ権限の確認後にすぐ停止し、この操作だけでは画像を送信しません。
+2. 操作側のWeb画面で同じプロフィールの端末を選び、監視ONを指示します。端末一覧の「実状態: ON」を確認します。
+3. 画面で通知回数が増えることを確認します。イベント履歴を調べる場合は、OAuth接続済みMCPクライアントの`get_focus_events`を使います。確認UI内にイベント履歴画面はありません。
+4. OFFを指示し、対象端末の撮影・送信が止まり、端末一覧が「実状態: OFF」になることを確認します。APIで検証する場合は`observed_state: off`と、`applied_revision`が指示の`revision`に追いついたことも確認します。
+5. 終了時は「許可を解除・停止」を押します。
+
+ONは接続中かつローカルで遠隔操作を許可した端末だけが対象です。OFF指示の受付と実際の停止は別で、offlineの端末に指示を保存しても停止完了とは表示しません。ページを隠す・閉じる・遠隔許可を解除すると撮影を止め、再開にはローカル許可と新しいON指示が必要です。操作するのは監視であり、Mac本体の電源ではありません。Reachy/CoreS3の遠隔制御アダプターは未実装です。
+
+### dotsの接続手順と確認範囲
+
+公開MCP URLは`https://focus-events-20261018.take-otani.workers.dev/mcp`です。ローカルの`http://127.0.0.1:3000/mcp/setup`を開き、ChatGPTのPluginsでカスタムMCPサーバーとOAuth認証を設定します。ローカル画面で10分間・1回限りのペアリングコードを発行し、OAuth画面へ入力して接続します。コードは公開画面や資料に載せません。
+
+dotsへ依頼する例:
+
+> Focusのfocus.phone_heldを購読して、イベントが届いたらスマホを置いて集中に戻るよう一言で知らせて。
+
+> Focusの監視デバイス一覧を取得して、mac-demo-1の監視をOFFにして。実際に停止したか状態も確認して。
+
+**実dotsアカウントによるOAuth接続・購読・通知は未確認です。** 上記は実施手順であり、成功済みのデモではありません。公開Events APIと仮想カメラのE2E成功を、dotsからの通知成功として説明しないでください。購読解除とカメラ停止は別操作です。
 
 ## 3分の進行
 
@@ -44,11 +75,11 @@ ChromeまたはSafariで`http://127.0.0.1:3000`を開きます。ポート使用
 | 0:25–0:50 | 開始、カメラ許可、机上のスマホ | 「本人が開始します。机にあるだけか、手に持っているかをAIが判定します。」 |
 | 0:50–1:20 | スマホを持ち、保持時間と通知回数を表示 | 「Decisions APIが保持と可視性を返し、APIが新しい画像で2秒以上を確認したら通知します。」 |
 | 1:20–1:45 | 再通知と一時停止 | 「通知後も再検知できます。必要なスマホ利用のときは一時停止。撮影と送信も止まります。」 |
-| 1:45–2:20 | READMEの構成図 | 「共通の判定をPC、小型デバイス、ロボットの反応へつなぎます。機器ごとの完成範囲はこちらです。」 |
-| 2:20–2:45 | 検証表 | 「実APIで2回通知を確認。重複抑止・停止・状態保存は自動テストで検証しています。精度の統計評価はこれからです。」 |
+| 1:45–2:20 | 構成図と端末一覧 | 「同じ判定を画面・音・ロボットの反応へつなぎます。APIが遠隔指示を保存し、端末が撮影と停止を実行します。」 |
+| 2:20–2:45 | 検証表 | 「自動テスト157件に加え、公開APIと仮想カメラで遠隔ONから検知、履歴反映、OFFまで確認しました。実dotsと現行条件の実機再試験は残っています。」 |
 | 2:45–3:00 | 終了、カメラ停止 | 「本人が自分の作業へ戻るための、端末を選べるフィードバックを目指します。」 |
 
-台本の期待どおりにならない場合、観測した結果をそのまま説明します。CoreS3・Reachyの実演はその機器で一連の動作を確認できた場合に差し替え、未確認の動きや音を実証済みとして説明しません。
+台本の期待どおりにならない場合、観測した結果をそのまま説明します。Reachyの実演や動画を差し込む場合は、[実機記録](reachy/validation.md)の5秒保持・5313msでfear1動作＋音声を確認した結果と、現行2秒条件での実演を区別してください。CoreS3の実画像から音まで、実dotsの通知、物理カメラの遠隔ON/OFFは当日の確認が取れるまで実証済みとして説明しません。
 
 ## 評価者が確認する項目
 
@@ -60,18 +91,47 @@ ChromeまたはSafariで`http://127.0.0.1:3000`を開きます。ポート使用
 | 手元が見えない | `unknown` / `insufficient_visibility`、通知なし |
 | 一時停止・終了 | カメラ・送信停止、停止後に届く古い結果から通知しない |
 | GET・同じフレームID再送 | 新しい通知を発行しない |
+| 遠隔許可前のON | ON拒否。ローカルの許可だけでも画像送信を開始しない |
+| 遠隔OFF | 対象端末が停止し、`observed_state: off`と指示の適用済みrevisionを確認 |
+| Eventsの履歴 | 同じsourceに通知IDごとのメタデータが届く。画像は含まれない |
 
 2秒は確認済み画像の受理時刻差です。物理的な持ち上げから通知までの厳密な2秒保証ではありません。観測間隔が2.5秒を超えると保持をリセットします。
 
 ## 通信・機器が使えない場合
 
 - カメラ許可がない: ブラウザとOSのカメラ権限を本人が確認します。撮影できないまま画像判定の成功を示しません。
-- `401`: アプリトークンを確認します。HTTP 200でも`provider_error` / `unknown`なら推論成功ではありません。
+- `401`: 接続先に対応するアプリトークンを確認します。HTTP 200でも`provider_error` / `unknown`なら推論成功ではありません。
 - 保持時間が進まない: 可視性・応答時間・観測間隔を表示し、通知条件が成立しているか確認します。
-- 会場回線が使えない: [READMEのローカルmock検証](../README.md)へ切り替え、「画像を解析しない状態遷移のデモ」と明示します。この旧版では5秒保持・60秒待機です。
+- 遠隔ONできない: 対象端末の表示状態、遠隔許可、heartbeat、online判定を確認します。OFFの受付だけで停止済みと判断しません。
+- Eventsやdotsが使えない: Macの判定・画面通知は独立して動作します。Events中継やdotsの成功は未確認のままにします。
+- 会場回線が使えない: [READMEのローカルmock検証](../README.md)へ切り替え、「画像を解析しない状態遷移のデモ」と明示します。mockの成功を実画像認識の根拠にはしません。
 
-## 参照できる試験結果
+## 参照できる試験結果とコマンド
 
-[PR #6](https://github.com/aieo-product/devdayHackathon261018/pull/6)には、Chrome仮想カメラから公開Worker・実OpenAIへ6フレーム送信し、保持2534msと2386msで2回通知した記録があります。これは用意した映像による試験で、一般的な実環境の認識精度や物理カメラの性能を表すものではありません。
+実装担当による2026-10-18の結果です。この資料の編集時に同じ試験を再実行したものではありません。
 
-同PRの確認コマンドは`npm test`（37件）、`npm run test:worker`（1件）、`npm run test:mac-check`（8件）です。資料整備時に再実行した旧チェックアウトの31件・1件とは分けて扱います。
+| 試験 | 確認結果 |
+| --- | --- |
+| `npm test` | API・クライアント37件通過 |
+| `npm run test:worker` | 既存Worker 1件通過 |
+| `npm run test:events` | Events 68件通過。Webhook受信先はモック |
+| `npm run test:mac-check` | Mac 51件通過。プロキシ19・遠隔制御32 |
+| `npm run smoke:events` | 公開Events APIの12項目通過。試験専用プロフィール・偽端末を使用 |
+| 公開APIブラウザE2E | 仮想カメラ＋実判定API＋公開Events Workerで7項目通過。遠隔ON、通知2件、履歴反映、遠隔OFF・停止報告 |
+| Reachy実機 | 当時の5秒条件で5313ms保持→fear1動作＋音声→時間終了を確認。現行2秒条件の再試験と遠隔制御は未確認 |
+
+4つの自動テストコマンドは計157件です。ローカルで再現する場合はリポジトリ直下で依存をインストールします。
+
+```sh
+npm ci
+npm test
+npm run test:worker
+npm run test:events
+npm run test:mac-check
+npm run check:worker
+npm run check:events
+```
+
+`check:*`は配備せずにWorkerをビルド検証します。公開Eventsの疎通は接続設定後に`npm run smoke:events`で確認できます。この試験は実カメラ・OpenAI推論・dots購読・外部Webhookを使いません。既存の公開判定APIへ画像を送る試験は`npm run smoke:worker`です。画像1枚を実OpenAIへ送るため料金が発生する場合があり、既定の無地画像は認識精度の検証にはなりません。
+
+[PR #6](https://github.com/aieo-product/devdayHackathon261018/pull/6)の初回Mac試験では、Chrome仮想カメラから公開Worker・実OpenAIへ6フレームを送り、保持2534msと2386msで2回通知しました。追加の公開Events E2Eでは、異なる通知2件のメタデータ到達とOFF後の全カメラトラック終了を確認しました。これらは用意した仮想映像の試験であり、物理カメラの遠隔操作、一般的な実環境の認識精度、実dotsへの通知を証明するものではありません。
