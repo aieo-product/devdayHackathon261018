@@ -20,5 +20,5 @@ Real recognition/motion/audio results must be recorded separately from mocks.
 
 - Smartphone put-down triggers cheerful1 once from a fresh, visible negative result.
 - Preserve preset sound and then play the bundled Japanese reminder.
-- Gradually increase idle rhythm over 120 seconds of visible non-holding results.
+- Increase idle rhythm at 10, 20 and 30 seconds of visible non-holding results, with smooth transitions.
 - Keep the camera reference pose fixed through interrupted emotions; return smoothly on cancellation.

@@ -80,8 +80,8 @@ class ReachyHardware:
         self.idle_enabled = settings.motion_enabled
 
     def set_focus_progress(self, seconds):
-        # Grow continuously over two minutes; no additional sounds or camera-obscuring poses.
-        self.target_energy = min(1.0, max(0.0, seconds / 120))
+        # Increase the rhythm every ten confirmed seconds, reaching full energy at thirty.
+        self.target_energy = min(1.0, max(0.0, math.floor(seconds / 10) / 3))
 
     def capture(self):
         with self.camera_lock:

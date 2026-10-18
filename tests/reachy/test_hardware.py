@@ -167,7 +167,16 @@ def test_focus_motion_grows_smoothly_with_bounded_head_and_antenna_travel():
     h = ReachyHardware(mini, clock=lambda: now[0])
     h._idle_baseline()
     h.configure(Settings())
-    h.set_focus_progress(120)
+    for seconds, energy in [
+        (0, 0),
+        (9.9, 0),
+        (10, 1 / 3),
+        (20, 2 / 3),
+        (30, 1),
+        (120, 1),
+    ]:
+        h.set_focus_progress(seconds)
+        assert h.target_energy == pytest.approx(energy)
     for _ in range(400):
         now[0] += 0.05
         h.step()
