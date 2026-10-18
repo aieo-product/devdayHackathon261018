@@ -100,6 +100,7 @@ def test_fear_keeps_preset_audio_then_speaks_and_cancel_discards_queued_speech()
     hardware.step()
     assert Path(played[-1]).name == "reminder.wav"
     assert len(played) == 2
+    hardware.cancel()
     hardware.notify(Settings())
     now[0] = 5.4
     hardware.step()
@@ -108,6 +109,58 @@ def test_fear_keeps_preset_audio_then_speaks_and_cancel_discards_queued_speech()
     now[0] = 10
     hardware.step()
     assert len(played) == 3
+
+
+def test_focus_dance_is_interruptible_and_later_notification_does_not_restart_fear():
+    now = [0.0]
+    played, stopped, targets = [], [], []
+    mini = SimpleNamespace(
+        media=SimpleNamespace(
+            audio=object(),
+            play_sound=played.append,
+            stop_playing=lambda: stopped.append(True),
+        ),
+        get_current_head_pose=lambda: np.eye(4),
+        get_present_antenna_joint_positions=lambda: [0, 0],
+        set_target=lambda **kw: targets.append(kw),
+    )
+
+    class Move:
+        duration = 4
+        timestamps = [0, 4]
+
+        def __init__(self, sound):
+            self.sound_path = sound
+
+        def evaluate(self, t):
+            return np.eye(4), np.zeros(2), 0
+
+    h = ReachyHardware(mini, clock=lambda: now[0])
+    h._idle_baseline()
+    h.configure(Settings())
+    h.dance, h.fear = Move("dance.ogg"), Move("fear.ogg")
+    assert h.set_focus_progress(9.99) == []
+    assert h.set_focus_progress(10) == [{"action": "dance1", "status": "started"}]
+    assert h.is_dancing()
+    now[0] = 0.81
+    h.step()
+    assert played == ["dance.ogg"]
+    h.notify(Settings())
+    assert not h.is_dancing() and stopped == [True]
+    assert h.emotion["move"] is h.fear
+    started = h.emotion["started"]
+    now[0] += 1
+    assert h.notify(Settings()) == [{"action": "fear1", "status": "already_playing"}]
+    assert h.emotion["started"] == started
+    h.step()
+    assert played == ["dance.ogg", "fear.ogg"]
+    h.cancel()
+    now[0] += 2
+    h.step()
+    h.set_focus_progress(10)
+    assert h.is_dancing()
+    assert h.set_focus_progress(0) == [{"action": "dance1", "status": "cancelled"}]
+    assert not h.is_dancing() and h.queued_speech is None
 
 
 def test_idle_default_and_fear_preset_are_exclusive_and_shutdown_stops():

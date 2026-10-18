@@ -56,6 +56,31 @@ class Api:
         return snapshot(sid)
 
 
+class DancingHardware(Hardware):
+    def __init__(self):
+        super().__init__()
+        self.dancing = True
+        self.dance_targets = 0
+
+    def is_dancing(self):
+        return self.dancing
+
+    def notify(self, settings):
+        self.dancing = False
+        return super().notify(settings)
+
+    def cancel(self):
+        self.dancing = False
+        super().cancel()
+
+    def set_focus_progress(self, seconds):
+        if seconds < 10:
+            self.dancing = False
+
+    def step(self):
+        self.dance_targets += int(self.dancing)
+
+
 @pytest.fixture
 def runtime(tmp_path):
     store = SettingsStore(tmp_path / "settings.json")
@@ -90,6 +115,44 @@ def test_phone_release_executes_happy_once(runtime):
     events = [e for e in r.session.events if e["event"] == "phone_put_down"]
     assert len(events) == 1
     assert events[0]["actions"] == [{"action": "cheerful1", "status": "started"}]
+
+
+@pytest.mark.parametrize(
+    "interruption", ["phone", "unknown", "failure", "paused", "ended"]
+)
+def test_first_phone_result_interrupts_dance_before_next_motion_target(
+    runtime, interruption
+):
+    r = runtime
+    r.control("start", consent=True)
+    r.hardware = DancingHardware()
+    f = Future()
+    r.pending, r.pending_generation = f, r.session.generation
+    result = snapshot(
+        state="suspected",
+        reason="phone_use_suspected",
+        phone_probability=0.9,
+        observable_probability=1,
+        notify=False,
+        continuous_hold_ms=0,
+    )
+    if interruption in ("paused", "ended"):
+        r.control("pause" if interruption == "paused" else "end")
+    if interruption == "failure":
+        f.set_exception(ApiError("timeout"))
+    else:
+        if interruption == "unknown":
+            result |= {
+                "state": "unknown",
+                "reason": "insufficient_visibility",
+                "observable_probability": 0.1,
+            }
+        f.set_result(result)
+    r.step()
+    assert not r.hardware.dancing
+    assert r.hardware.dance_targets == 0
+    assert r.hardware.notifications == (1 if interruption == "phone" else 0)
+    assert r.session.notification_count == 0  # We did not wait for a server notify.
 
 
 @pytest.mark.parametrize(
