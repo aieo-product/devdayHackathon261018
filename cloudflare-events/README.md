@@ -1,5 +1,7 @@
 # Focus MCP Events / dots・遠隔監視
 
+**チーム全体への周知は[共通API仕様書](../cloudflare/API仕様書.md)を共有してください。** 冒頭に今回の追加点、2つのWorkerの使い分け、認証、担当別の対応をまとめています。本書は追加Workerの配備・運用・MCP Eventsの詳細です。
+
 スマホ保持の検知を `focus.phone_held` イベントとしてChatGPT Work / dotsへ届け、Web画面やdotsから同じプロフィールに登録した端末の監視をON/OFFするための独立Workerです。既存の[共通判定API](../cloudflare/README.md)のコード・設定・配備は変更しません。
 
 判定APIは画像を解析し、端末は撮影と実際の停止を担当します。このWorkerはイベント配送と監視指示・実際の端末状態を保存します。監視OFFはカメラ撮影・画像送信の停止であり、端末本体の電源OFFではありません。

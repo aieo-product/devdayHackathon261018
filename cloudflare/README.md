@@ -4,12 +4,17 @@ Mac・Reachy Mini・CoreS3が同じREST APIを利用します。RESTは通信形
 
 ## メンバー向け共有先
 
+- **最新の統合仕様（今回の追加を含む）：** [共通API仕様書](https://github.com/aieo-product/devdayHackathon261018/blob/feat/mcp-events-dots/cloudflare/API仕様書.md)
+- **今回の追加：** MCP Events / dots連携、監視デバイスの遠隔ON/OFF、Mac確認画面。[Issue #7](https://github.com/aieo-product/devdayHackathon261018/issues/7) / [PR #10](https://github.com/aieo-product/devdayHackathon261018/pull/10)で共有。
+- **追加機能の接続先：** `https://focus-events-20261018.take-otani.workers.dev`（[詳細・設定](../cloudflare-events/README.md)）。既存判定APIとはURL・トークンが異なります。
 - API入口：https://focus-shared-api-20261018.take-otani.workers.dev/
-- レビュー用仕様書：https://focus-shared-api-20261018.take-otani.workers.dev/docs
-- OpenAPI：https://focus-shared-api-20261018.take-otani.workers.dev/openapi.json
+- 判定Worker配備時点の仕様書：https://focus-shared-api-20261018.take-otani.workers.dev/docs
+- 判定API専用OpenAPI：https://focus-shared-api-20261018.take-otani.workers.dev/openapi.json
 - 設定状態：https://focus-shared-api-20261018.take-otani.workers.dev/health
 
 これらのGETは認証不要です。`/`は利用可能なURLを返すJSON、`/docs`はMarkdown、`/openapi.json`はOpenAPI JSONです。API利用者にCloudflareのメンバー登録は不要です。`/v1/`呼び出し用の`FOCUS_API_TOKEN`は別経路で共有し、`OPENAI_API_KEY`はサーバー専用とします。`/health`の`configured`で設定状態を確認してください。
+
+今回の文書更新では安定した判定Workerを再配備しません。追加機能を含めて周知するときは上のGitHub版仕様書を共有してください。既存の2秒判定・クールダウンなし・セッションAPIは変更していません。
 
 ## 起動と配備
 
