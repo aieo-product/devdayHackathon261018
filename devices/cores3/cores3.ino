@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <time.h>
+#include "phone_reminder_audio.h"
 
 #if __has_include("config.h")
 #include "config.h"
@@ -77,6 +78,22 @@ SemaphoreHandle_t hardwareLock = nullptr;
 bool configured = false;
 bool workerReady = false;
 volatile uint8_t lastWifiDisconnectReason = 0;
+uint32_t sessionDeadlineMs = 0;
+bool timerActive = false;
+char visibleStatus[24] = "PAUSED";
+bool visibleMock = false;
+uint32_t warningUntilMs = 0;
+uint32_t lastTimerSecond = UINT32_MAX;
+
+uint32_t remainingSeconds() {
+  portENTER_CRITICAL(&commandLock);
+  uint32_t deadline = sessionDeadlineMs;
+  bool active = timerActive;
+  portEXIT_CRITICAL(&commandLock);
+  if (!active) return strcmp(visibleStatus, "ENDED") == 0 ? 0 : FocusConfig::SESSION_DURATION_SECONDS;
+  int32_t remaining = static_cast<int32_t>(deadline - millis());
+  return remaining > 0 ? (static_cast<uint32_t>(remaining) + 999) / 1000 : 0;
+}
 
 Command readCommand() {
   portENTER_CRITICAL(&commandLock);
@@ -89,7 +106,11 @@ Command changeIntent(Intent intent) {
   portENTER_CRITICAL(&commandLock);
   requested.intent = intent;
   ++requested.generation;
-  if (intent == Intent::End) ++requested.endSequence;
+  if (intent == Intent::End) {
+    ++requested.endSequence;
+    timerActive = false;
+    sessionDeadlineMs = 0;
+  }
   Command result = requested;
   portEXIT_CRITICAL(&commandLock);
   return result;
@@ -464,7 +485,18 @@ void worker(void*) {
           JsonDocument doc;
           doc["device_type"] = "cores3";
           doc["duration_seconds"] = FocusConfig::SESSION_DURATION_SECONDS;
+          uint32_t creationStarted = millis();
           ok = postJson(command, "/v1/sessions", doc, 201, snapshot, error);
+          if (ok) {
+            portENTER_CRITICAL(&commandLock);
+            // A pending detection pause keeps this session's original deadline.
+            // END (including END -> START) must never revive the old timer.
+            if (requested.endSequence == command.endSequence && requested.intent != Intent::End) {
+              sessionDeadlineMs = creationStarted + FocusConfig::SESSION_DURATION_SECONDS * 1000UL;
+              timerActive = true;
+            }
+            portEXIT_CRITICAL(&commandLock);
+          }
           if (ok) {
             // Retain even a stale creation result so the pending STOP can pause it.
             sessionId = snapshot.sessionId;
@@ -540,35 +572,73 @@ void worker(void*) {
   }
 }
 
+void drawTimer() {
+  uint32_t remaining = remainingSeconds();
+  if (remaining == lastTimerSecond) return;
+  lastTimerSecond = remaining;
+  char timer[16];
+  snprintf(timer, sizeof(timer), "%02lu:%02lu", static_cast<unsigned long>(remaining / 60),
+           static_cast<unsigned long>(remaining % 60));
+  CoreS3.Display.fillRect(0, 33, 320, 57, TFT_BLACK);
+  CoreS3.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+  CoreS3.Display.setFont(&fonts::Font7);
+  CoreS3.Display.setTextSize(1);
+  CoreS3.Display.drawCenterString(timer, 160, 35);
+}
+
+void renderStatus() {
+  bool warning = warningUntilMs && static_cast<int32_t>(warningUntilMs - millis()) > 0;
+  CoreS3.Display.fillScreen(TFT_BLACK);
+  CoreS3.Display.setFont(&fonts::efontJA_16);
+  CoreS3.Display.setTextSize(1);
+  CoreS3.Display.setTextColor(visibleMock ? TFT_YELLOW : TFT_CYAN, TFT_BLACK);
+  CoreS3.Display.drawCenterString(visibleMock ? "集中タイマー / 模擬判定" : "集中タイマー", 160, 6);
+  lastTimerSecond = UINT32_MAX;
+  drawTimer();
+  CoreS3.Display.setFont(&fonts::efontJA_24);
+  if (warning) {
+    CoreS3.Display.fillRect(4, 96, 312, 66, TFT_RED);
+    CoreS3.Display.setTextColor(TFT_WHITE, TFT_RED);
+    CoreS3.Display.drawCenterString("スマホを置いて", 160, 101);
+    CoreS3.Display.drawCenterString("ください", 160, 131);
+  } else {
+    const char* label = "判定を確認できません";
+    if (!strcmp(visibleStatus, "PAUSED")) label = "検知停止中";
+    else if (!strcmp(visibleStatus, "ENDED")) label = "終了しました";
+    else if (!strcmp(visibleStatus, "STARTING") || !strcmp(visibleStatus, "CONNECTING")) label = "接続・判定の準備中";
+    else if (!strcmp(visibleStatus, "FOCUS")) label = "スマホを見守り中";
+    else if (!strcmp(visibleStatus, "CHECKING")) label = "スマホの保持を確認中";
+    else if (!strcmp(visibleStatus, "COOLDOWN")) label = "集中に戻りましょう";
+    else if (!strcmp(visibleStatus, "CONFIG REQUIRED")) label = "接続設定が必要です";
+    CoreS3.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    CoreS3.Display.drawCenterString(label, 160, 110);
+  }
+  CoreS3.Display.setFont(&fonts::efontJA_16);
+  CoreS3.Display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  const char* hint = "手とスマホが映る向きに置いてください";
+  if (!strcmp(visibleStatus, "PAUSED")) hint = timerActive ? "検知停止中もタイマーは継続します" : "開始すると撮影・判定を始めます";
+  else if (!strcmp(visibleStatus, "UNKNOWN")) hint = "映り方・ネット接続を確認してください";
+  else if (!strcmp(visibleStatus, "ENDED")) hint = "開始で新しい集中時間を始めます";
+  CoreS3.Display.drawCenterString(hint, 160, 165);
+  const char* labels[] = {readCommand().intent == Intent::Run ? "検知中" : timerActive ? "検知再開" : "開始", "検知停止", "終了"};
+  for (int i = 0; i < 3; ++i) {
+    int x = 6 + i * 106;
+    CoreS3.Display.drawRoundRect(x, 189, 100, 44, 5, TFT_WHITE);
+    CoreS3.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    CoreS3.Display.drawCenterString(labels[i], x + 50, 202);
+  }
+}
+
 void drawStatus(const char* status, const char* detail, bool mock = false) {
   Serial.printf("[focus] ui status=%s detail=%s provider=%s\n", status, detail,
                 mock ? "mock" : "pending/live");
-  CoreS3.Display.fillScreen(TFT_BLACK);
-  CoreS3.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-  CoreS3.Display.setTextSize(2);
-  CoreS3.Display.setCursor(12, 12);
-  CoreS3.Display.print("FOCUS / CoreS3");
-  CoreS3.Display.setTextColor(mock ? TFT_YELLOW : TFT_CYAN, TFT_BLACK);
-  CoreS3.Display.setTextSize(1);
-  CoreS3.Display.setCursor(12, 40);
-  CoreS3.Display.print(mock ? "MOCK - simulated result" : "Independent camera client");
-  CoreS3.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-  CoreS3.Display.setTextSize(2);
-  CoreS3.Display.setCursor(12, 78);
-  CoreS3.Display.print(status);
-  CoreS3.Display.setTextSize(1);
-  CoreS3.Display.setCursor(12, 118);
-  CoreS3.Display.print(detail);
-  CoreS3.Display.setCursor(12, 146);
-  CoreS3.Display.print("STOP pauses locally; END finishes.");
-  const char* labels[] = {"START", "STOP", "END"};
-  for (int i = 0; i < 3; ++i) {
-    int x = 6 + i * 106;
-    CoreS3.Display.drawRoundRect(x, 182, 100, 50, 5, TFT_WHITE);
-    CoreS3.Display.setTextSize(2);
-    CoreS3.Display.setCursor(x + 14, 199);
-    CoreS3.Display.print(labels[i]);
+  snprintf(visibleStatus, sizeof(visibleStatus), "%s", status);
+  visibleMock = mock;
+  if (!strcmp(status, "PAUSED") || !strcmp(status, "ENDED") || !strcmp(status, "STARTING")) {
+    warningUntilMs = 0;
+    CoreS3.Speaker.stop();
   }
+  renderStatus();
 }
 
 void setup() {
@@ -603,7 +673,7 @@ void pollSerialControl() {
     if (c == '\r' || c == '\n') {
       line[used] = '\0';
       if (configured && workerReady) {
-        if (strcmp(line, "START") == 0) {
+        if (strcmp(line, "START") == 0 && readCommand().intent != Intent::Run) {
           changeIntent(Intent::Run);
           drawStatus("STARTING", "Waiting for server");
         } else if (strcmp(line, "STOP") == 0) {
@@ -631,8 +701,8 @@ void loop() {
     pollSerialControl();
     if (configured && workerReady && CoreS3.Touch.getCount() > 0) {
       auto touch = CoreS3.Touch.getDetail();
-      if (touch.wasPressed() && touch.y >= 182 && touch.y <= 232) {
-        if (touch.x >= 6 && touch.x <= 106) {
+      if (touch.wasPressed() && touch.y >= 189 && touch.y <= 233) {
+        if (touch.x >= 6 && touch.x <= 106 && readCommand().intent != Intent::Run) {
           changeIntent(Intent::Run);
           drawStatus("STARTING", "Waiting for server");
         } else if (touch.x >= 112 && touch.x <= 212) {
@@ -647,12 +717,23 @@ void loop() {
     UiEvent event{};
     if (uiQueue && xQueueReceive(uiQueue, &event, 0) == pdTRUE &&
         event.generation == readCommand().generation) {
-      drawStatus(event.status, event.detail, event.mock);
-      if (event.notify && readCommand().intent == Intent::Run && FocusConfig::ENABLE_BEEP) {
-        CoreS3.Speaker.tone(880, 120);
-        Serial.println("[focus] beep requested");
+      if (event.notify && readCommand().intent == Intent::Run) {
+        warningUntilMs = millis() + 5000;
+        if (FocusConfig::ENABLE_BEEP && !CoreS3.Speaker.isPlaying()) {
+          CoreS3.Speaker.playRaw(phone_reminder_audio::kSamples, phone_reminder_audio::kSampleCount,
+                                phone_reminder_audio::kSampleRate, false, 1, 0, true);
+          Serial.println("[focus] Japanese voice reminder requested");
+        }
       }
+      drawStatus(event.status, event.detail, event.mock);
     }
+    if (timerActive && remainingSeconds() == 0) {
+      changeIntent(Intent::End);
+      drawStatus("ENDED", "Local session deadline reached");
+    } else if (warningUntilMs && static_cast<int32_t>(millis() - warningUntilMs) >= 0) {
+      warningUntilMs = 0;
+      renderStatus();
+    } else drawTimer();
     xSemaphoreGive(hardwareLock);
   }
   delay(15);
