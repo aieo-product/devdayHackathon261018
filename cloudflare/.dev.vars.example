@@ -1,0 +1,6 @@
+# Local-only synthetic decision mode. No real image recognition.
+DECISION_PROVIDER=mock
+FOCUS_API_TOKEN=local-demo-change-me
+MOCK_PHONE_PROBABILITY=0.95
+MOCK_OBSERVABLE_PROBABILITY=1
+# Set OPENAI_API_KEY as a Cloudflare secret for real decisions.

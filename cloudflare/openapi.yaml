@@ -1,0 +1,992 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Focus 共通判定API（Cloudflare Worker）",
+    "version": "1.0.0",
+    "description": "REST + Bearer。公開URLは配備後に共有。状態はSQLite Durable Objectsへ保存。mockは画像解析しない。実時間で正確に5秒後の通知は保証しない。"
+  },
+  "servers": [
+    {
+      "url": "https://focus-shared-api-20261018.take-otani.workers.dev",
+      "description": "Cloudflare共通API（実画像判定はOPENAI_API_KEY設定後）"
+    },
+    {
+      "url": "http://localhost:8787",
+      "description": "ローカル開発"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "設定状態。外部API疎通は検証しない。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "provider",
+                    "configured"
+                  ],
+                  "properties": {
+                    "provider": {
+                      "type": "string"
+                    },
+                    "configured": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "options": {
+        "operationId": "optionshealth",
+        "security": [],
+        "description": "CORSプリフライト。Origin完全一致。許可メソッドGET/POST、許可ヘッダーAuthorization/Content-Type/X-Frame-Id。",
+        "responses": {
+          "204": {
+            "description": "許可"
+          },
+          "403": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions": {
+      "post": {
+        "operationId": "createSession",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "device_type"
+                ],
+                "properties": {
+                  "device_type": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+                    "examples": [
+                      "mac",
+                      "reachy_mini",
+                      "cores3"
+                    ]
+                  },
+                  "duration_seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 14400,
+                    "default": 1500
+                  }
+                }
+              }
+            }
+          },
+          "description": "JSON本文は16384バイト以下。"
+        },
+        "responses": {
+          "201": {
+            "description": "成功",
+            "headers": {
+              "X-Request-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Snapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "options": {
+        "operationId": "optionsv1sessions",
+        "security": [],
+        "description": "CORSプリフライト。Origin完全一致。許可メソッドGET/POST、許可ヘッダーAuthorization/Content-Type/X-Frame-Id。",
+        "responses": {
+          "204": {
+            "description": "許可"
+          },
+          "403": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions/{session_id}": {
+      "parameters": [
+        {
+          "name": "session_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9-]{1,80}$"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getSession",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "headers": {
+              "X-Request-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Snapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "options": {
+        "operationId": "optionsv1sessionssessionid",
+        "security": [],
+        "description": "CORSプリフライト。Origin完全一致。許可メソッドGET/POST、許可ヘッダーAuthorization/Content-Type/X-Frame-Id。",
+        "responses": {
+          "204": {
+            "description": "許可"
+          },
+          "403": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions/{session_id}/control": {
+      "parameters": [
+        {
+          "name": "session_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9-]{1,80}$"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "controlSession",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "action"
+                ],
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "pause",
+                      "resume",
+                      "end"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "description": "JSON本文は16384バイト以下。"
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "headers": {
+              "X-Request-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Snapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "options": {
+        "operationId": "optionsv1sessionssessionidcontrol",
+        "security": [],
+        "description": "CORSプリフライト。Origin完全一致。許可メソッドGET/POST、許可ヘッダーAuthorization/Content-Type/X-Frame-Id。",
+        "responses": {
+          "204": {
+            "description": "許可"
+          },
+          "403": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions/{session_id}/frames": {
+      "parameters": [
+        {
+          "name": "session_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9-]{1,80}$"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "submitFrame",
+        "description": "同一セッションで1画像ずつ送信。next_capture_after_msに従う。観測間隔2500ms超は保持進捗リセット。陽性画像で5000msを確認後に通知。画像自体は永続保存しない。",
+        "parameters": [
+          {
+            "name": "X-Frame-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_.:-]{1,128}$"
+            },
+            "description": "セッション内で一意。受理済みIDの再送は通知しない。"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "生画像バイト列。最大1048576バイト。multipart/JSON/Base64不可。",
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "headers": {
+              "X-Request-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Snapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "options": {
+        "operationId": "optionsv1sessionssessionidframes",
+        "security": [],
+        "description": "CORSプリフライト。Origin完全一致。許可メソッドGET/POST、許可ヘッダーAuthorization/Content-Type/X-Frame-Id。",
+        "responses": {
+          "204": {
+            "description": "許可"
+          },
+          "403": {
+            "description": "HTTPエラー。判定プロバイダーの失敗は通常200のunknown snapshot。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "FOCUS_API_TOKEN。共有デモトークン。"
+      }
+    },
+    "schemas": {
+      "Snapshot": {
+        "type": "object",
+        "required": [
+          "session_id",
+          "state",
+          "notify",
+          "notification_id",
+          "message",
+          "phone_probability",
+          "observable_probability",
+          "consecutive_count",
+          "continuous_hold_ms",
+          "required_hold_ms",
+          "cooldown_remaining_ms",
+          "next_capture_after_ms",
+          "provider",
+          "reason"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "observing",
+              "suspected",
+              "cooldown",
+              "unknown",
+              "paused",
+              "ended"
+            ]
+          },
+          "notify": {
+            "type": "boolean",
+            "description": "新しいframes応答でtrueの場合だけ通知を一度実行。GET/controlはfalse。"
+          },
+          "notification_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone_probability": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "observable_probability": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "mock",
+              "openai"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "状態の補足理由。通知条件として使わない。再起動中断はdecision_interrupted。"
+          },
+          "consecutive_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "continuous_hold_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "陽性画像の受理時刻による確認済み継続時間。GETや端末タイマーでは増えない。"
+          },
+          "required_hold_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "const": 5000
+          },
+          "cooldown_remaining_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "next_capture_after_ms": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "error",
+          "request_id"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          "request_id": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
