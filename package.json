@@ -22,7 +22,12 @@
     "check:events": "wrangler deploy --dry-run -c cloudflare-events/wrangler.jsonc",
     "deploy:events": "wrangler deploy -c cloudflare-events/wrangler.jsonc",
     "start:front": "npm --prefix focus-dopa-preview start",
-    "test:front": "npm --prefix focus-dopa-preview test"
+    "test:front": "npm --prefix focus-dopa-preview test",
+    "build:web": "node cloudflare-web/scripts/build-assets.mjs",
+    "start:web": "npm run build:web && wrangler dev -c cloudflare-web/wrangler.jsonc",
+    "check:web": "npm run build:web && wrangler deploy --dry-run -c cloudflare-web/wrangler.jsonc",
+    "deploy:web": "npm run build:web && wrangler deploy -c cloudflare-web/wrangler.jsonc",
+    "test:web": "node --test cloudflare-web/test/*.test.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

@@ -1,0 +1,13 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "focus-web-20261018",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": true },
+  "services": [{ "binding": "FOCUS_API", "service": "focus-shared-api-20261018" }],
+  "durable_objects": { "bindings": [{ "name": "BROWSER_SESSIONS", "class_name": "FocusBrowserSession" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FocusBrowserSession"] }],
+  "observability": { "enabled": false }
+}

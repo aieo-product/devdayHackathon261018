@@ -1,0 +1,35 @@
+name: Public web frontend
+
+on:
+  pull_request:
+    paths:
+      - 'focus-dopa-preview/**'
+      - 'cloudflare-web/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/web.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'focus-dopa-preview/**'
+      - 'cloudflare-web/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/web.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:front
+      - run: npm run test:web
+      - run: npm run build:web

@@ -1,6 +1,6 @@
 /** Plays a cancellable sequence of presentation cues without changing session state. */
 export class ActionShowcase {
-  constructor({ onStep = () => {}, onFinish = () => {}, setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
+  constructor({ onStep = () => {}, onFinish = () => {}, setTimer = globalThis.setTimeout.bind(globalThis), clearTimer = globalThis.clearTimeout.bind(globalThis) } = {}) {
     this.onStep = onStep;
     this.onFinish = onFinish;
     this.setTimer = setTimer;

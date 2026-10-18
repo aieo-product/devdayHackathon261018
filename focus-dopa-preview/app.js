@@ -9,9 +9,13 @@ import { MiniMonitor } from './mini-monitor.js';
 import { DetectionReplay } from './detection-replay.js';
 import { DesktopOverlayClient } from './desktop-overlay-client.js';
 import { ActionShowcase } from './action-showcase.js';
+import { TeamAccess } from './team-access.js';
+import { resolveViewMode, applyViewMode } from './view-mode.js';
 const $=id=>document.getElementById(id);
-const showcaseView=new URL(location.href).searchParams.get('showcase')==='1';
-if(showcaseView){document.body.dataset.showcaseView='true';$('api-mode').value='demo';$('auto-mini').checked=false;$('desktop-overlay-enabled').checked=false;}
+const viewMode=resolveViewMode(location.href),demoView=viewMode.demo;
+applyViewMode(document,viewMode);
+$('api-mode').value=demoView?'demo':'connected';
+if(demoView){$('auto-mini').checked=false;$('desktop-overlay-enabled').checked=false;}
 const profiles={
  bounce:{title:'NEON BOUNCE',caption:'弾むリアクション × ネオンの波紋',slogan:'ぷにっと、いこう！',duration:850},
  rush:{title:'ARCADE RUSH',caption:'ためて跳ぶ × スピードライン × ゲージ点火',slogan:'よーし、スタート！',duration:680},
@@ -26,10 +30,13 @@ const reduce=matchMedia('(prefers-reduced-motion: reduce)');
 const session=new Session();
 const lyric=new LyricMotion($('lyric-stage'));
 const playfulTimer=new PlayfulTimer($('timer-stage'));
-const api=new FocusApiClient();
+const access=new TeamAccess({allowLocalBypass:['localhost','127.0.0.1','[::1]','::1'].includes(location.hostname),onChange:renderAccess,onLost:loseAccess});
+const createApi=()=>new FocusApiClient({fetchImpl:(...args)=>access.fetchAuthorized(...args)});
+let api=createApi(),desktopStatusTick=null;
 const toast=new NotificationToast($('toast'));
 const detectionReplay=new DetectionReplay();
 const desktopOverlay=new DesktopOverlayClient();
+const desktopLocalCopy={note:$('desktop-overlay-note').textContent,caption:$('notification-caption').textContent};
 let notificationGeneration=0,desktopTestTimer=null,desktopStatusBusy=false;
 let desktopNotice=null,lastFrameAt=null,miniOpenedAt=0;
 const mini=new MiniMonitor({
@@ -91,6 +98,7 @@ function stopShowcase({clear=true,message='デモを停止しました。'}={}){
  if(wasActive){$('action-showcase-status').textContent=message;if(clear){clearCue();effects.stopAudio();stateSpeech();}}
 }
 function playShowcase(steps=showcaseSteps){
+ if(!demoView)return;
  stopShowcase();clearCue();effects.stopAudio();
  desiredSound=true;void unlockSound();
  document.body.dataset.showcase='playing';
@@ -199,13 +207,13 @@ function render(){
  $('session-status').textContent={ready:'READY',running:'IN SESSION',paused:'PAUSED',break:'ON A BREAK',ended:'SESSION ENDED',completed:'COMPLETE',unknown:'STATE UNCONFIRMED'}[state];
  $('remaining-label').textContent={paused:'一時停止中',break:'休憩中',ended:'セッション終了',completed:'完了！',unknown:'API状態未確認'}[state]||'残り時間';
  const main=$('main-action');main.querySelector('span').textContent=busy?'確認中…':state==='unknown'?'再確認':active?'一時停止':['paused','break'].includes(state)?'再開':['ended','completed'].includes(state)?'もう一度':'はじめる';main.querySelector('use').setAttribute('href',active?'#i-pause':'#i-play');
- const canStart=apiMode==='demo'||apiStatus==='ready';
- main.disabled=busy||(!active&&!['paused','break','unknown'].includes(state)&&!canStart);
+ const canStart=apiMode==='demo'||(access.allowed&&!access.busy&&apiStatus==='ready');
+ main.disabled=busy||(apiMode==='connected'&&(!access.allowed||access.busy))||(!active&&!['paused','break','unknown'].includes(state)&&!canStart);
  $('break-action').disabled=busy||!['running','paused'].includes(state);$('end-action').disabled=busy||!['running','paused','break','unknown'].includes(state);
  $('camera-paused').hidden=apiMode==='connected'?Boolean(cameraStream):!stopped;
  $('camera-status').textContent=cameraStream?(apiMode==='connected'&&api.active?'カメラ有効':'ローカルプレビュー'):apiMode==='demo'?'デモ映像':'カメラ停止';
  $('simulate-detection').disabled=apiMode!=='demo'||!active||!session.notificationEnabled;
- $('test-notification').disabled=!session.notificationEnabled;$('test-desktop-overlay').disabled=!session.notificationEnabled||!$('desktop-overlay-enabled').checked;$('notification-count').textContent=view.notificationCount;
+ $('test-notification').disabled=!demoView||!session.notificationEnabled;$('test-desktop-overlay').disabled=!nativeAllowed()||!session.notificationEnabled||!$('desktop-overlay-enabled').checked;$('notification-count').textContent=view.notificationCount;
  const locked=busy||['running','paused','break','unknown'].includes(state);
  $('duration-select').disabled=locked;$('duration-help').textContent=locked?'時間の変更はセッション終了後にできます。':apiMode==='connected'?'APIでは一時停止中もセッションの期限が進みます。':'次に始めるセッションの時間を選べます。';
  if($('api-mode'))$('api-mode').disabled=locked;
@@ -260,7 +268,7 @@ async function showFocusNotification({message='スマホから目を離して、
  else if(!document.hidden)toast.show({message,profile:characterProfile,kind,source,motion:!reduce.matches&&intensity!=='off'});
  desktopNotify(message,{test:kind==='test'});
  later(stateSpeech,8000);
- if($('desktop-overlay-enabled').checked){
+ if(nativeAllowed()&&$('desktop-overlay-enabled').checked){
   const delivered=await desktopOverlay.show({character:characterProfile?.id||'green',message,kind,intensity,reduced:reduce.matches});
   if(generation!==notificationGeneration||!session.notificationEnabled)return;
   if(delivered){$('desktop-overlay-status').textContent='Macの画面全体に警告を表示しました';return;}
@@ -271,15 +279,30 @@ function cancelDesktopCue({keepalive=false}={}){
  notificationGeneration++;
  if(desktopTestTimer!==null)clearTimeout(desktopTestTimer);
  desktopTestTimer=null;
- void desktopOverlay.clear({keepalive});
+ if(nativeAllowed())void desktopOverlay.clear({keepalive});
+}
+function nativeAllowed(){return !demoView&&access.nativeAllowed;}
+function syncDesktopAccess(){
+ if(!nativeAllowed()){
+  if(desktopStatusTick!==null)clearInterval(desktopStatusTick);desktopStatusTick=null;
+  $('desktop-overlay-enabled').checked=false;$('desktop-overlay-enabled').disabled=true;
+  $('test-desktop-overlay').disabled=true;
+  $('desktop-overlay-status').textContent='公開版ではWeb画面内に表示します。小窓も利用できます。';
+  $('desktop-overlay-note').textContent='警告はブラウザ内のリリック・トースト・小窓に表示します。元のタブとブラウザは開いたままにしてください。';
+  $('notification-caption').textContent='検知すると警告リリック＋小窓／トーストでお知らせ。公開版ではWeb画面内に表示します。';
+  return;
+ }
+ $('desktop-overlay-enabled').disabled=false;
+ $('desktop-overlay-note').textContent=desktopLocalCopy.note;$('notification-caption').textContent=desktopLocalCopy.caption;
+ if(desktopStatusTick===null){$('desktop-overlay-enabled').checked=true;desktopStatusTick=setInterval(()=>{if(!document.hidden&&desktopTestTimer===null)refreshDesktopStatus();},3000);void refreshDesktopStatus();}
 }
 async function refreshDesktopStatus(){
- if(desktopStatusBusy)return;
+ if(!nativeAllowed()||desktopStatusBusy)return;
  desktopStatusBusy=true;
  const connected=await desktopOverlay.refresh();
- desktopStatusBusy=false;
+ desktopStatusBusy=false;if(!nativeAllowed())return;
  $('desktop-overlay-status').textContent=connected?'接続済み · ほかのアプリの上にも表示できます':'Mac表示アプリを起動すると、デスクトップ全体に表示できます';
- $('test-desktop-overlay').disabled=!session.notificationEnabled||!$('desktop-overlay-enabled').checked;
+ $('test-desktop-overlay').disabled=!nativeAllowed()||!session.notificationEnabled||!$('desktop-overlay-enabled').checked;
 }
 
 function notifyCompletion(){
@@ -288,20 +311,36 @@ function notifyCompletion(){
  mini.notify('セッション完了！ひと休みしよう。');
  desktopNotify('セッション完了！ひと休みしよう。');
 }
+function renderAccess(){
+ $('team-access').hidden=demoView||(access.checked&&!access.required);
+ $('team-access-form').hidden=access.authenticated;
+ $('team-access-code').disabled=access.busy;
+ $('team-access-login').disabled=access.busy;
+ $('team-access-logout').hidden=!access.authenticated;
+ $('team-access-logout').disabled=access.busy||Boolean(apiOperation||api.busy);
+ $('team-access-message').textContent=access.message;
+ syncDesktopAccess();render();
+}
+function loseAccess(){
+ stopCamera('チーム用コードを入力してください。カメラと画像送信は停止しています。');
+ stopTransient();api=createApi();apiState='ready';apiStatus='login';apiError='';apiDetail='';apiNotificationCount=0;lastFrameAt=null;apiOperation=null;
+}
 function renderApi(){
  const put=(id,text)=>{if($(id))$(id).textContent=text;};
+ const requiresLogin=apiMode==='connected'&&!access.allowed;
  const provider=api.snapshot?.provider||api.health?.provider;
  put('api-provider',provider==='mock'?'MOCK · 画像解析なし':provider==='openai'?'OPENAI · 画像判定':'プロバイダー未確認');
- put('api-status',apiMode==='demo'?'演出デモ':apiOperation?'API操作を確認中':apiError?'APIの確認が必要':{checking:'API設定を確認中',ready:'APIへ接続可能',unconfigured:'API未設定',error:'API接続エラー'}[apiStatus]||'API未確認');
- put('api-detail',apiMode==='demo'?'カメラ画像は送信しません。検知は手動シミュレーションです。':apiError||apiDetail||(api.health?.configured?'接続設定を確認しました。カメラの有効化とセッション開始後に、共有APIへ画像を送信して判定します。':'APIの設定を確認してください。'));
+ put('api-status',apiMode==='demo'?'演出デモ':requiresLogin?(access.checked?'チーム用コードを入力':'利用権限を確認中'):apiOperation?'API操作を確認中':apiError?'APIの確認が必要':{checking:'API設定を確認中',ready:'APIへ接続可能',unconfigured:'API未設定',error:'API接続エラー'}[apiStatus]||'API未確認');
+ put('api-detail',apiMode==='demo'?'カメラ画像は送信しません。検知は手動シミュレーションです。':requiresLogin?access.message:apiError||apiDetail||(api.health?.configured?'接続設定を確認しました。カメラの有効化とセッション開始後に、共有APIへ画像を送信して判定します。':'APIの設定を確認してください。'));
  const stateLabels={observing:'見守り中',suspected:'スマホ保持を確認中',cooldown:'通知後の待機',unknown:'判定できません',paused:'一時停止',ended:'終了'};
  const reasons={insufficient_visibility:'人・手元が十分見えません',provider_not_configured:'判定プロバイダーが未設定',provider_error:'判定プロバイダーのエラー',decision_timeout:'判定が時間切れ',decision_refused:'判定が拒否されました',invalid_decision:'判定応答の形式が不正',stale_result:'古い判定結果を破棄',decision_interrupted:'判定が中断されました'};
  const snapshot=api.snapshot;
  const observationLabel=apiState==='running'&&!cameraStream?'撮影待ち':stateLabels[snapshot?.state]||'状態未確認';
  put('api-observation',apiMode==='demo'?'デモモード · API判定なし':snapshot?`${apiState==='unknown'?'API状態未確認 · 前回: ':''}${observationLabel}${reasons[snapshot.reason]?` · ${reasons[snapshot.reason]}`:''} · ${cameraMessage}`:cameraMessage);
- if(apiMode==='connected')put('detection-status','実際の検知は共有APIが判定します。手動シミュレーションは「演出デモ」で利用できます。');
- if($('api-retry'))$('api-retry').disabled=Boolean(apiOperation||api.busy);
- if($('camera-enable'))$('camera-enable').disabled=cameraPending||Boolean(cameraStream)||Boolean(apiOperation);
+ if(apiMode==='connected')put('detection-status','カメラ画像からスマホ保持を判定し、通知します。');
+ if($('api-retry'))$('api-retry').disabled=access.busy||Boolean(apiOperation||api.busy);
+ if($('team-access-logout'))$('team-access-logout').disabled=access.busy||Boolean(apiOperation||api.busy);
+ if($('camera-enable'))$('camera-enable').disabled=demoView||!access.allowed||access.busy||cameraPending||Boolean(cameraStream)||Boolean(apiOperation);
  if($('camera-disable'))$('camera-disable').disabled=!cameraPending&&!cameraStream&&!captureBusy;
 }
 function clearCaptureTimer(){if(captureTimer!==null)clearTimeout(captureTimer);captureTimer=null;}
@@ -311,7 +350,7 @@ function stopCamera(message='カメラを停止しました。再開時はカメ
  const video=$('live-camera');if(video){video.pause();video.srcObject=null;video.hidden=true;video.closest('.camera-preview')?.classList.remove('is-live');}
  document.body.dataset.camera='off';cameraMessage=message;
 }
-function canCapture(){return apiMode==='connected'&&apiState==='running'&&api.active&&Boolean(cameraStream);}
+function canCapture(){return access.allowed&&!access.busy&&apiMode==='connected'&&apiState==='running'&&api.active&&Boolean(cameraStream);}
 function scheduleCapture(delay){
  clearCaptureTimer();if(!canCapture())return;
  const generation=cameraGeneration;
@@ -354,7 +393,7 @@ async function captureAndSend(generation){
  }
 }
 async function enableCamera(){
- if(cameraPending||cameraStream)return;
+ if(demoView||!access.allowed||access.busy||cameraPending||cameraStream)return;
  if(!navigator.mediaDevices?.getUserMedia){cameraMessage='このブラウザではカメラを利用できません。';render();return;}
  const generation=++cameraGeneration;cameraPending=true;cameraMessage='カメラの許可を確認中です。';render();
  try{
@@ -376,15 +415,17 @@ function updateApiState(action){
  apiState=snapshot.state==='ended'?(['session_expired','local_session_expired'].includes(snapshot.reason)?'completed':'ended'):snapshot.state==='paused'?(action==='break'?'break':'paused'):'running';
 }
 async function runApiAction(action,{keepalive=false,silent=false}={}){
- if(apiOperation||api.busy)return false;
+ if(!access.allowed||access.busy||apiOperation||api.busy)return false;
+ const accessGeneration=access.generation;
  if(action==='start'&&apiStatus!=='ready')return false;
  if(['pause','break','end'].includes(action))stopCamera();else clearCaptureTimer();
  stopTransient();apiOperation=action;apiError='';render();
  try{
-  if(action==='start'){await api.start({durationSeconds:session.duration});apiNotificationCount=0;lastMilestone=0;lastFrameAt=null;log=[];}
+  if(action==='start'){await api.start({durationSeconds:session.duration});if(accessGeneration!==access.generation)return false;apiNotificationCount=0;lastMilestone=0;lastFrameAt=null;log=[];}
   else await api.control(action==='break'?'pause':action,{keepalive});
+  if(accessGeneration!==access.generation)return false;
   updateApiState(action);
-  if(apiState==='running'&&!api.active){stopCamera('開始・再開の確認中にカメラが停止されたため、一時停止しました。');await api.control('pause',{keepalive});updateApiState('pause');}
+  if(apiState==='running'&&!api.active){stopCamera('開始・再開の確認中にカメラが停止されたため、一時停止しました。');await api.control('pause',{keepalive});if(accessGeneration!==access.generation)return false;updateApiState('pause');}
   apiStatus='ready';apiDetail=api.snapshot?.provider==='mock'?'モックAPIです。画像の内容を解析する判定ではありません。':'API状態を確認しました。判定結果は下に表示します。';
   if(!silent&&(document.hidden||(action==='end'&&apiState!=='completed')))effects.playSound(apiState==='completed'?'complete':action==='end'?'end':action);
   addLog(`API: ${{start:'セッション開始',pause:'一時停止',break:'休憩開始',resume:'再開',end:'終了'}[action]}`);
@@ -392,18 +433,23 @@ async function runApiAction(action,{keepalive=false,silent=false}={}){
   if(canCapture())scheduleCapture(api.snapshot?.next_capture_after_ms??0);
   return true;
  }catch(error){
+  if(accessGeneration!==access.generation)return false;
+  if(error.status===401){access.invalidate();return false;}
   stopCamera('API操作の結果を確認できないため、カメラを停止しました。');apiState=action==='start'&&!api.sessionId?'ready':'unknown';apiError=`${error.message} 撮影は停止済みです。サーバー側の状態は未確認です。`;addLog(`API操作を確認できませんでした (${error.code||'error'})`);return false;
- }finally{apiOperation=null;render();stateSpeech();}
+ }finally{if(accessGeneration===access.generation)apiOperation=null;render();stateSpeech();}
 }
 async function refreshApi(){
- if(apiOperation||api.busy)return;
+ if(demoView||access.busy||apiOperation||api.busy)return;
  apiOperation='check';apiStatus='checking';apiError='';render();
+ let accessGeneration=access.generation;
  try{
-  const health=await api.checkHealth();apiStatus=health.configured?'ready':'unconfigured';
+  if(!await access.check()){apiStatus='login';return;}
+  accessGeneration=access.generation;
+  const health=await api.checkHealth();if(accessGeneration!==access.generation)return;apiStatus=health.configured?'ready':'unconfigured';
   apiDetail=health.configured?(health.provider==='mock'?'モックAPIに接続しています。画像の内容は解析しません。':'接続設定を確認しました。カメラの有効化とセッション開始後に、共有APIへ画像を送信して判定します。'):'判定プロバイダーが未設定です。';
-  if(apiState==='unknown'&&api.sessionId){stopCamera();await api.control('pause');updateApiState('pause');apiDetail='API状態を確認して一時停止しました。再開にはカメラの有効化が必要です。';}
-  if(apiState==='running'&&!api.active){stopCamera('確認中に撮影が停止されたため、一時停止しました。');await api.control('pause');updateApiState('pause');apiDetail='API状態を確認して一時停止しました。';}
- }catch(error){if(error.code==='session_not_found'){api.reset();apiState='ready';apiStatus=api.health?.configured?'ready':'unconfigured';apiError='前のAPIセッションは失効しました。新しいセッションを開始できます。';}else{apiStatus='error';apiError=`${error.message} (${error.code||'network_error'})`;}}
+  if(apiState==='unknown'&&api.sessionId){stopCamera();await api.control('pause');if(accessGeneration!==access.generation)return;updateApiState('pause');apiDetail='API状態を確認して一時停止しました。再開にはカメラの有効化が必要です。';}
+  if(apiState==='running'&&!api.active){stopCamera('確認中に撮影が停止されたため、一時停止しました。');await api.control('pause');if(accessGeneration!==access.generation)return;updateApiState('pause');apiDetail='API状態を確認して一時停止しました。';}
+ }catch(error){if(accessGeneration!==access.generation||!access.allowed)return;if(error.status===401){access.invalidate();return;}if(error.code==='session_not_found'){api.reset();apiState='ready';apiStatus=api.health?.configured?'ready':'unconfigured';apiError='前のAPIセッションは失効しました。新しいセッションを開始できます。';}else{apiStatus='error';apiError=`${error.message} (${error.code||'network_error'})`;}}
  finally{apiOperation=null;render();}
 }
 function addLog(text){log.unshift({text,time:new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'})});log=log.slice(0,60);const list=$('event-log');list.replaceChildren();for(const item of log){const li=document.createElement('li');const time=document.createElement('time');time.textContent=item.time;li.append(time,document.createTextNode(item.text));list.append(li);}}
@@ -424,19 +470,27 @@ $('break-action').addEventListener('click',()=>{if(apiMode==='connected'){runApi
 function endSession(){if(apiMode==='connected'){runApiAction('end');return;}if(!session.end())return;stopTransient();effects.playSound('end');addLog('デモセッション終了');render();stateSpeech();}
 $('end-action').addEventListener('click',endSession);
 $('api-retry')?.addEventListener('click',refreshApi);
+$('team-access-form').addEventListener('submit',async event=>{
+ event.preventDefault();if(access.busy)return;
+ const input=$('team-access-code');const pending=access.login(input.value);input.value='';
+ if(await pending)await refreshApi();else input.focus();
+});
+$('team-access-logout').addEventListener('click',async()=>{
+ if(access.busy||apiOperation||api.busy)return;
+ stopCamera('ログアウトのためカメラと画像送信を停止しました。');stopTransient();
+ const currentApi=api;
+ await access.logout({beforeLogout:()=>currentApi.sessionId&&currentApi.snapshot?.state!=='ended'?currentApi.control('end'):undefined});
+ render();stateSpeech();
+});
 $('camera-enable')?.addEventListener('click',enableCamera);
 $('camera-disable')?.addEventListener('click',()=>{stopCamera();if(apiMode==='connected'&&apiState==='running')runApiAction('pause');render();});
-$('api-mode')?.addEventListener('change',event=>{
- if(apiOperation||['running','paused','break','unknown'].includes(currentView().status)){event.target.value=apiMode;return;}
- stopCamera();stopTransient();apiMode=event.target.value==='demo'?'demo':'connected';
- $('detection-status').textContent=apiMode==='demo'?'デモセッション開始後に手動検知を試せます。':'検知シミュレーションはデモモードで利用できます。API通知はサーバーのnotifyに従います。';
- render();stateSpeech();if(apiMode==='connected')refreshApi();
-});
+// The URL selects the experience; production never switches to a manual demo.
+$('api-mode')?.addEventListener('change',event=>{event.target.value=demoView?'demo':'connected';});
 $('mascot').addEventListener('click',()=>{const now=performance.now();tapLevel=now-lastTapAt<1500?Math.min(3,tapLevel+1):1;lastTapAt=now;cue('tap',{actionLevel:tapLevel});});
 function setPattern(value,{animate=true}={}){if(!profiles[value])return;cancelDesktopCue();clearCue();pattern=value;effects.setTheme(value==='fever'?'fever':'classic');document.body.dataset.pattern=value;document.querySelectorAll('[data-choice]').forEach(b=>{b.classList.toggle('selected',b.dataset.choice===value);b.setAttribute('aria-pressed',b.dataset.choice===value);});$('pattern-caption').textContent=profiles[value].caption;$('demo-caption').textContent=`${profiles[value].title}：左のDOTSをタップして、動きを試せます。`;const url=new URL(location.href);url.searchParams.set('pattern',value);history.replaceState(null,'',url);if(animate)cue('tap');}
 for(const button of document.querySelectorAll('[data-choice]'))button.addEventListener('click',()=>setPattern(button.dataset.choice));
-for(const button of document.querySelectorAll('[data-card]'))button.addEventListener('click',()=>cue('lyric',{demo:true,lyricKind:button.dataset.card}));
-for(const button of document.querySelectorAll('[data-demo]'))button.addEventListener('click',()=>cue(button.dataset.demo,{demo:true}));
+for(const button of document.querySelectorAll(demoView?'[data-card]':':not(*)'))button.addEventListener('click',()=>cue('lyric',{demo:true,lyricKind:button.dataset.card}));
+for(const button of document.querySelectorAll(demoView?'[data-demo]':':not(*)'))button.addEventListener('click',()=>cue(button.dataset.demo,{demo:true}));
 $('intensity').addEventListener('change',e=>{intensity=e.target.value;cancelDesktopCue();document.body.dataset.intensity=intensity;clearCue();effects.setIntensity(intensity);stateSpeech();$('demo-caption').textContent=`演出量：${intensity.toUpperCase()}`;});
 function renderSound(){
  $('sound-button').setAttribute('aria-pressed',String(sound));
@@ -456,11 +510,11 @@ document.addEventListener('pointerdown',event=>{if(!event.target.closest('#sound
 document.addEventListener('keydown',()=>{void unlockSound();},{capture:true});
 renderSound();
 $('notification-toggle').addEventListener('change',e=>{session.notificationEnabled=e.target.checked;$('notification-word').textContent=e.target.checked?'ON':'OFF';if(!e.target.checked){stopTransient();stateSpeech();}render();});
-$('test-notification').addEventListener('click',()=>{if($('test-notification').disabled)return;showFocusNotification({kind:'test',message:'検知すると、このようにお知らせします。',source:'表示テスト · 全画面＋小窓／トースト'});addLog('全画面リリックと通知をテスト');});
-$('simulate-detection').addEventListener('click',()=>{if(apiMode!=='demo')return;const generation=session.generation;if(!session.receiveDetection({generation})){$('detection-status').textContent='連続する通知を抑止しています。試作の間隔は60秒です。';return;}addLog('スマホ操作を検知（シミュレーション）');addLog('通知をアプリ内に表示（シミュレーション）');render();showFocusNotification();$('detection-status').textContent='検知 → 通知 → 専用リアクション。次の通知まで60秒以上空けます。';});
+$('test-notification').addEventListener('click',()=>{if(!demoView||$('test-notification').disabled)return;showFocusNotification({kind:'test',message:'検知すると、このようにお知らせします。',source:'表示テスト · 全画面＋小窓／トースト'});addLog('全画面リリックと通知をテスト');});
+$('simulate-detection').addEventListener('click',()=>{if(!demoView||apiMode!=='demo')return;const generation=session.generation;if(!session.receiveDetection({generation})){$('detection-status').textContent='連続する通知を抑止しています。試作の間隔は60秒です。';return;}addLog('スマホ操作を検知（シミュレーション）');addLog('通知をアプリ内に表示（シミュレーション）');render();showFocusNotification();$('detection-status').textContent='検知 → 通知 → 専用リアクション。次の通知まで60秒以上空けます。';});
 $('desktop-overlay-enabled').addEventListener('change',()=>{if(!$('desktop-overlay-enabled').checked)cancelDesktopCue();refreshDesktopStatus();});
 $('test-desktop-overlay').addEventListener('click',()=>{
- if(!session.notificationEnabled||!$('desktop-overlay-enabled').checked)return;
+ if(!demoView||!nativeAllowed()||!session.notificationEnabled||!$('desktop-overlay-enabled').checked)return;
  cancelDesktopCue();
  $('desktop-overlay-status').textContent='5秒後にテスト表示します。ほかのアプリへ切り替えてみてください';
  desktopTestTimer=setTimeout(()=>{desktopTestTimer=null;void showFocusNotification({kind:'test',message:'デスクトップでも、いまの作業に戻ろう！',source:'デスクトップ表示テスト'});},5000);
@@ -495,7 +549,7 @@ const tick=setInterval(()=>{
  if(session.status==='running'){const milestone=Math.floor((1-session.ratio)*4);if(milestone>lastMilestone&&milestone<4){lastMilestone=milestone;if(!document.hidden)cue('milestone');else effects.playSound('milestone');addLog(`${Math.round(milestone*25)}%の時間が経過`);}render();}
 },250);
 window.addEventListener('pagehide',event=>{cancelDesktopCue({keepalive:true});suspendForPageExit({keepalive:true});if(!event.persisted){clearInterval(tick);clearInterval(desktopStatusTick);effects.destroy();}});
-window.addEventListener('pageshow',event=>{if(event.persisted){render();stateSpeech();refreshDesktopStatus();}});
+window.addEventListener('pageshow',event=>{if(event.persisted){render();stateSpeech();if(!demoView)refreshApi();refreshDesktopStatus();}});
 // Each lit segment is clipped by the exact remaining-time ratio.
 const svg=document.querySelector('.time-ring');
 const segments=document.createElementNS('http://www.w3.org/2000/svg','g');segments.classList.add('ring-segments');
@@ -521,6 +575,5 @@ setupCharacterPicker({onChange:profile=>{
  $('video-demo').textContent='▶ DOTSアクション';
  stateSpeech();
 }});
-const desktopStatusTick=showcaseView?null:setInterval(()=>{if(!document.hidden&&desktopTestTimer===null)refreshDesktopStatus();},3000);
-if(!showcaseView)refreshDesktopStatus();
-setPattern(new URL(location.href).searchParams.get('pattern')||'bounce',{animate:false});render();stateSpeech();if(!showcaseView)refreshApi();
+syncDesktopAccess();
+setPattern(new URL(location.href).searchParams.get('pattern')||'bounce',{animate:false});render();stateSpeech();if(!demoView)refreshApi();

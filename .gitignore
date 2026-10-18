@@ -22,3 +22,6 @@ agents.local.md
 .wrangler/
 .worker-build/
 .focus-overlay-bridge.json
+
+# Also ignore locally linked dependency directories.
+node_modules
